@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { processBillFlow } from "@/ai/flows";
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";

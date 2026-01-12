@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { auth } from "@/auth";
 import { logAction } from "@/lib/audit-logger";
 import { prisma } from "@/lib/prisma";
