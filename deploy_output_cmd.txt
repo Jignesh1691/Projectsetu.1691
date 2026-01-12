@@ -1,0 +1,9 @@
+Vercel CLI 50.1.6
+Retrieving project…
+Deploying jigneshs-projects-9c95417b/projectsetu
+Uploading [--------------------] (0.0B/35KB)
+Uploading [=========-----------] (16.1KB/35KB)
+Uploading [==================--] (32.1KB/35KB)
+Uploading [====================] (35.0KB/35KB)
+Error: Git author deploy@projectsetu.com must have access to the team JIGNESH's projects on Vercel to create deployments.
+Learn more: https://vercel.com/docs/deployments/troubleshoot-project-collaboration

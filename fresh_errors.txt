@@ -1,0 +1,18 @@
+﻿
+components/labor-form.tsx(26,11
+): error TS2769: No overload 
+matches this call.
+components/material-stock-in-fo
+rm.tsx(67,27): error TS2769: 
+No overload matches this call.
+components/material-stock-out-f
+orm.tsx(62,27): error TS2769: 
+No overload matches this call.
+components/theme-provider.tsx(5
+,41): error TS2307: Cannot 
+find module 
+'next-themes/dist/types' or 
+its corresponding type 
+declarations.
+
+

@@ -1,0 +1,530 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum Status {
+  PENDING
+  ACTIVE
+}
+
+model Organization {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  createdAt   DateTime     @default(now())
+  invites     Invite[]
+  memberships Membership[]
+  projects    Project[]
+  ledgers     Ledger[]
+  transactions Transaction[]
+  photos       Photo[]
+  documents    Document[]
+  labors       Labor[]
+  hajari       Hajari[]
+  tasks        Task[]
+  materials    Material[]
+  materialLedger MaterialLedger[]
+  records      Record[]
+  journalEntries JournalEntry[]
+  auditLogs      AuditLog[]
+}
+
+model User {
+  id            String       @id @default(cuid())
+  name          String?
+  email         String       @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  status        Status       @default(ACTIVE)
+  accounts      Account[]
+  sessions      Session[]
+  memberships   Membership[]
+  projectUsers  ProjectUser[]
+  notifications Notification[]
+  pushSubscriptions PushSubscription[]
+  
+  // Creator relations
+  createdTransactions   Transaction[]    @relation("TransactionCreator")
+  createdRecords        Record[]         @relation("RecordCreator")
+  createdHajari         Hajari[]         @relation("HajariCreator")
+  createdMaterialLedger MaterialLedger[] @relation("MaterialLedgerCreator")
+  createdTasks          Task[]           @relation("TaskCreator")
+  createdPhotos         Photo[]          @relation("PhotoCreator")
+
+  createdDocuments      Document[]       @relation("DocumentCreator")
+  createdJournalEntries JournalEntry[]   @relation("JournalCreator")
+  auditLogs             AuditLog[]
+}
+
+model Membership {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String
+  role           Role         @default(USER)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+}
+
+model Invite {
+  id             String       @id @default(cuid())
+  email          String
+  role           Role         @default(USER)
+  token          String       @unique
+  expiresAt      DateTime
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accepted       Boolean      @default(false)
+}
+
+model Project {
+  id             String        @id @default(cuid())
+  name           String
+  location       String?
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projectUsers   ProjectUser[]
+  transactions   Transaction[]
+  photos         Photo[]
+  documents      Document[]
+  records        Record[]
+  hajari         Hajari[]
+  tasks          Task[]
+  materialLedger MaterialLedger[]
+  journalDebitEntries  JournalEntry[] @relation("JournalDebitProject")
+  journalCreditEntries JournalEntry[] @relation("JournalCreditProject")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  
+  @@unique([organizationId, name])
+}
+
+model ProjectUser {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  status    String   @default("active") // active, inactive
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+}
+
+model Ledger {
+  id             String        @id @default(cuid())
+  name           String
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  transactions   Transaction[]
+  records        Record[]
+  
+  // Approval workflow fields
+  approvalStatus  String?       @default("approved")
+  submittedBy     String?
+  remarks         String?
+  requestMessage  String?
+  rejectionCount  Int?          @default(0)
+  pendingData     Json?
+  
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  
+  @@unique([organizationId, name])
+  
+  // Journal Relations
+  journalDebits  JournalEntry[] @relation("JournalDebit")
+  journalCredits JournalEntry[] @relation("JournalCredit")
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  type        String   // income, expense
+  amount      Float
+  description String
+  date        DateTime
+  paymentMode String   @default("cash") // cash, bank
+  billUrl     String?
+  
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  ledgerId    String
+  ledger      Ledger   @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+  
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  createdBy   String
+  creator     User     @relation("TransactionCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  convertedFromRecordId String?
+  hajariSettlementId String?
+  
+  // Approval workflow fields
+  approvalStatus  String?  @default("approved")
+  submittedBy     String?
+  remarks         String?
+  requestMessage  String?
+  rejectionCount  Int?     @default(0)
+  pendingData     Json?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([createdBy])
+}
+
+model Record {
+  id          String   @id @default(cuid())
+  type        String   // asset, liability
+  amount      Float
+  description String
+  dueDate     DateTime
+  status      String   @default("pending") // pending, paid
+  paymentMode String   @default("cash") // cash, bank
+  billUrl     String?
+  
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  ledgerId    String
+  ledger      Ledger   @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+  
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  createdBy   String
+  creator     User     @relation("RecordCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  
+  // Approval workflow fields
+  approvalStatus  String?  @default("approved")
+  submittedBy     String?
+  remarks         String?
+  requestMessage  String?
+  rejectionCount  Int?     @default(0)
+  pendingData     Json?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([createdBy])
+}
+
+model Labor {
+  id             String       @id @default(cuid())
+  name           String
+  type           String       // laborer, foreman
+  rate           Float        // Daily rate
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  hajariRecords  Hajari[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Hajari {
+  id             String       @id @default(cuid())
+  date           DateTime
+  status         String       @default("present") // present, absent, half-day, settlement, pending-settlement
+  overtimeHours  Float        @default(0)
+  upad           Float        @default(0) // Advances or settlement amount
+  
+  laborId        String
+  labor          Labor        @relation(fields: [laborId], references: [id], onDelete: Cascade)
+  
+  projectId      String
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  createdBy      String
+  creator        User         @relation("HajariCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  
+  // Approval workflow fields
+  approvalStatus  String?  @default("approved")
+  submittedBy     String?
+  remarks         String?
+  requestMessage  String?
+  rejectionCount  Int?     @default(0)
+  pendingData     Json?
+  
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  
+  @@index([createdBy])
+}
+
+model Task {
+  id             String       @id @default(cuid())
+  title          String
+  description    String?
+  status         String       @default("todo") // todo, in-progress, done
+  dueDate        DateTime?
+  
+  projectId      String
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  createdBy      String
+  creator        User         @relation("TaskCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  
+  // Approval workflow fields
+  approvalStatus  String?  @default("approved")
+  submittedBy     String?
+  remarks         String?
+  requestMessage  String?
+  rejectionCount  Int?     @default(0)
+  pendingData     Json?
+  
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  
+  @@index([createdBy])
+}
+
+model Material {
+  id             String       @id @default(cuid())
+  name           String
+  unit           String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ledgerEntries  MaterialLedger[]
+  
+  // Approval workflow fields
+  approvalStatus  String?  @default("approved")
+  submittedBy     String?
+  remarks         String?
+  requestMessage  String?
+  rejectionCount  Int?     @default(0)
+  pendingData     Json?
+  
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, name])
+}
+
+model MaterialLedger {
+  id             String       @id @default(cuid())
+  date           DateTime
+  type           String       // in, out
+  quantity       Float
+  description    String?
+  challanUrl     String?
+  
+  materialId     String
+  material       Material     @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  
+  projectId      String
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  createdBy      String
+  creator        User         @relation("MaterialLedgerCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  
+  // Approval workflow fields
+  approvalStatus  String?  @default("approved")
+  submittedBy     String?
+  remarks         String?
+  requestMessage  String?
+  rejectionCount  Int?     @default(0)
+  pendingData     Json?
+  
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  
+  @@index([createdBy])
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message     String
+  itemId      String?
+  itemType    String?
+  type        String   @default("info") // approved, rejected, submitted, info
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model Photo {
+  id             String       @id @default(cuid())
+  url            String
+  description    String?
+  projectId      String
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      String
+  creator        User         @relation("PhotoCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  
+  // Approval workflow fields
+  approvalStatus  String?  @default("approved")
+  submittedBy     String?
+  remarks         String?
+  requestMessage  String?
+  rejectionCount  Int?     @default(0)
+  pendingData     Json?
+  
+  createdAt      DateTime     @default(now())
+  
+  @@index([createdBy])
+}
+
+model Document {
+  id             String       @id @default(cuid())
+  url            String
+  name           String
+  description    String?
+  projectId      String
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      String
+  creator        User         @relation("DocumentCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  
+  // Approval workflow fields
+  approvalStatus  String?  @default("approved")
+  submittedBy     String?
+  remarks         String?
+  requestMessage  String?
+  rejectionCount  Int?     @default(0)
+  pendingData     Json?
+  
+  createdAt      DateTime     @default(now())
+  
+  @@index([createdBy])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  keys      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model JournalEntry {
+  id             String   @id @default(cuid())
+  date           DateTime
+  description    String
+  amount         Float
+  
+  // Debit Side (Receiver / Asset Increase / Liability Decrease)
+  debitMode      String   // "cash", "bank", "ledger"
+  debitLedgerId  String?
+  debitLedger    Ledger?  @relation("JournalDebit", fields: [debitLedgerId], references: [id])
+  
+  // Credit Side (Giver / Asset Decrease / Liability Increase)
+  creditMode     String   // "cash", "bank", "ledger"
+  creditLedgerId String?
+  creditLedger   Ledger?  @relation("JournalCredit", fields: [creditLedgerId], references: [id])
+  
+  debitProjectId String
+  debitProject   Project @relation("JournalDebitProject", fields: [debitProjectId], references: [id], onDelete: Cascade)
+
+  creditProjectId String
+  creditProject   Project @relation("JournalCreditProject", fields: [creditProjectId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  createdBy      String
+  creator        User     @relation("JournalCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Approval workflow fields
+  approvalStatus  String?  @default("approved")
+  submittedBy     String?
+  remarks         String?
+  requestMessage  String?
+  rejectionCount  Int?     @default(0)
+  pendingData     Json?
+  
+  @@index([creditLedgerId])
+  @@index([createdBy])
+}
+
+model AuditLog {
+  id             String       @id @default(cuid())
+  action         String       // create, update, delete, approve, reject
+  entity         String       // journal, transaction, etc.
+  entityId       String
+  details        String?
+  metadata       Json?        // Store diffs: { before: ..., after: ... }
+  
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}
