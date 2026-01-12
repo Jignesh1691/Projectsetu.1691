@@ -75,12 +75,12 @@ export async function POST(req: Request) {
             requestMessage = formData.get("requestMessage") as string;
 
             if (file) {
-                // Check if R2 is configured
-                if (process.env.R2_BUCKET_NAME) {
+                // Check if S3 is configured
+                if (process.env.AWS_S3_BUCKET_NAME) {
                     const fileName = `${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
                     url = await uploadFile(file, fileName);
                 } else {
-                    // Fallback to error or temporary base64 if needed, but we want R2
+                    // Fallback to error or temporary base64 if needed, but we want S3
                     return NextResponse.json({ error: "Cloud storage not configured" }, { status: 500 });
                 }
             }
