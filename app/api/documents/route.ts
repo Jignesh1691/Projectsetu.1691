@@ -77,8 +77,8 @@ export async function POST(req: Request) {
             name = formData.get("name") as string;
 
             if (file) {
-                // Check if S3 is configured
-                if (process.env.AWS_S3_BUCKET_NAME) {
+                // Check if R2 is configured
+                if (process.env.R2_BUCKET_NAME) {
                     const fileName = `${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
                     url = await uploadFile(file, fileName);
                     if (!name) name = file.name;
