@@ -116,7 +116,7 @@ export function LedgerForm({ setOpen, ledger, onLedgerCreated }: LedgerFormProps
             </FormItem>
           )}
         />
-        {isNonAdmin && (
+        {isNonAdmin && ledger && (
           <FormField
             control={form.control}
             name="request_message"

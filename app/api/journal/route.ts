@@ -14,6 +14,11 @@ export async function GET(req: Request) {
             return apiResponse.unauthorized();
         }
 
+        const { searchParams } = new URL(req.url);
+        const limit = parseInt(searchParams.get('limit') || '100');
+        const page = parseInt(searchParams.get('page') || '1');
+        const skip = (page - 1) * limit;
+
         const journalEntries = await prisma.journalEntry.findMany({
             where: {
                 organizationId: session.user.organizationId as string,
@@ -25,7 +30,9 @@ export async function GET(req: Request) {
             },
             orderBy: {
                 date: 'desc'
-            }
+            },
+            take: limit,
+            skip: skip,
         });
 
         return apiResponse.success(journalEntries);

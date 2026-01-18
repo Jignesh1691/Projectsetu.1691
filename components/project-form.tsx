@@ -25,7 +25,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 const formSchema = z.object({
   name: z.string().min(2, 'Project name must be at least 2 characters.'),
   location: z.string().optional(),
-  assigned_users: z.array(z.string()),
+  assigned_users: z.array(z.object({
+    userId: z.string(),
+    canViewFinances: z.boolean(),
+    canCreateEntries: z.boolean(),
+  })),
 });
 
 interface ProjectFormProps {
@@ -44,8 +48,16 @@ export function ProjectForm({ setOpen, project, onProjectCreated }: ProjectFormP
       name: project?.name || '',
       location: project?.location || '',
       assigned_users: project
-        ? project_users.filter(pu => pu.project_id === project.id).map(pu => pu.user_id)
-        : (appUser ? [appUser.id] : []),
+        ? project_users.filter(pu => pu.project_id === project.id).map(pu => ({
+          userId: pu.user_id,
+          canViewFinances: pu.can_view_finances ?? true,
+          canCreateEntries: pu.can_create_entries ?? true
+        }))
+        : (appUser ? [{
+          userId: appUser.id,
+          canViewFinances: true,
+          canCreateEntries: true
+        }] : []),
     },
   });
 
@@ -72,7 +84,6 @@ export function ProjectForm({ setOpen, project, onProjectCreated }: ProjectFormP
           description: `Project "${values.name}" has been updated.`,
         });
       } else {
-        console.log("DEBUG: Submitting new project with users:", values.assigned_users);
         const createdProject = await addProject({ name: values.name, location: values.location }, values.assigned_users);
         toast({
           title: 'Success!',
@@ -134,51 +145,79 @@ export function ProjectForm({ setOpen, project, onProjectCreated }: ProjectFormP
         <FormField
           control={form.control}
           name="assigned_users"
-          render={() => (
+          render={({ field }) => (
             <FormItem className="space-y-2">
               <div className="mb-2">
-                <FormLabel className="text-xs font-bold uppercase text-muted-foreground/70">Assign Users</FormLabel>
+                <FormLabel className="text-xs font-bold uppercase text-muted-foreground/70">Assign Users & Permissions</FormLabel>
                 <FormDescription className="text-[10px]">
-                  Select the users who will be assigned to this project.
+                  Select users and set their financial access levels.
                 </FormDescription>
               </div>
-              <div className="rounded-xl border p-3 max-h-[180px] overflow-y-auto bg-card/50">
-                <div className="space-y-1.5">
-                  {users.map((user) => (
-                    <FormField
-                      key={user.id}
-                      control={form.control}
-                      name="assigned_users"
-                      render={({ field }) => {
-                        return (
-                          <FormItem
-                            key={user.id}
-                            className="flex flex-row items-center space-x-3 space-y-0"
-                          >
-                            <FormControl>
+              <div className="rounded-xl border p-3 max-h-[300px] overflow-y-auto bg-card/50">
+                <div className="space-y-4">
+                  {users.map((user) => {
+                    const isSelected = field.value?.some(u => u.userId === user.id);
+                    const userData = field.value?.find(u => u.userId === user.id);
+
+                    return (
+                      <div key={user.id} className="space-y-2 pb-2 border-b last:border-0 border-border/50">
+                        <div className="flex flex-row items-center space-x-3">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={(checked) => {
+                              const current = field.value || [];
+                              if (checked) {
+                                field.onChange([...current, { userId: user.id, canViewFinances: true, canCreateEntries: true }]);
+                              } else {
+                                field.onChange(current.filter(u => u.userId !== user.id));
+                              }
+                            }}
+                            className="h-4 w-4"
+                          />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium leading-none">
+                              {user.name} <span className="text-[10px] text-muted-foreground uppercase ml-1 opacity-70">({user.role})</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        {isSelected && (
+                          <div className="ml-7 grid grid-cols-2 gap-2 p-2 bg-muted/30 rounded-lg">
+                            <div className="flex items-center space-x-2">
                               <Checkbox
-                                checked={field.value?.includes(user.id)}
+                                id={`finance-${user.id}`}
+                                checked={userData?.canViewFinances}
                                 onCheckedChange={(checked) => {
-                                  const current = field.value || [];
-                                  return checked
-                                    ? field.onChange([...current, user.id])
-                                    : field.onChange(
-                                      current.filter(
-                                        (value) => value !== user.id
-                                      )
-                                    )
+                                  field.onChange(field.value.map(u =>
+                                    u.userId === user.id ? { ...u, canViewFinances: !!checked } : u
+                                  ));
                                 }}
-                                className="h-4 w-4"
+                                className="h-3.5 w-3.5"
                               />
-                            </FormControl>
-                            <FormLabel className="font-normal cursor-pointer text-sm">
-                              {user.name} <span className="text-xs text-muted-foreground">({user.role})</span>
-                            </FormLabel>
-                          </FormItem>
-                        )
-                      }}
-                    />
-                  ))}
+                              <label htmlFor={`finance-${user.id}`} className="text-[10px] font-medium leading-none cursor-pointer">
+                                See Ledger/Finances
+                              </label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`entries-${user.id}`}
+                                checked={userData?.canCreateEntries}
+                                onCheckedChange={(checked) => {
+                                  field.onChange(field.value.map(u =>
+                                    u.userId === user.id ? { ...u, canCreateEntries: !!checked } : u
+                                  ));
+                                }}
+                                className="h-3.5 w-3.5"
+                              />
+                              <label htmlFor={`entries-${user.id}`} className="text-[10px] font-medium leading-none cursor-pointer">
+                                Create Entries
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
               <FormMessage />

@@ -203,7 +203,7 @@ export function TaskForm({ setOpen, task }: TaskFormProps) {
               )}
             />
 
-            {isNonAdmin && (
+            {isNonAdmin && task && (
               <FormField
                 control={form.control}
                 name="request_message"

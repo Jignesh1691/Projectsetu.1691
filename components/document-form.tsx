@@ -401,7 +401,7 @@ export function DocumentForm({ setOpen, initialDoc }: DocumentFormProps) {
                 )}
               />
 
-              {isNonAdmin && (
+              {isNonAdmin && initialDoc && (
                 <FormField
                   control={form.control}
                   name="request_message"

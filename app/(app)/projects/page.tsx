@@ -4,6 +4,7 @@
 import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { PlusCircle, FolderKanban, MoreVertical, Pencil, Trash2, Download, FileText, File, View } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAppState } from '@/hooks/use-store';
 import {
   Dialog,
@@ -16,6 +17,7 @@ import { ProjectForm } from '@/components/project-form';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency, cn } from '@/lib/utils';
+import { getEffectiveTransaction, getEffectiveRecordable } from '@/lib/financial-utils';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -99,7 +101,11 @@ export default function ProjectsPage() {
   };
 
   const calculateProjectFinancials = (projectId: string) => {
-    const projectTransactions = transactions.filter((t) => t.project_id === projectId);
+    const projectTransactions = transactions
+      .filter((t) => t.project_id === projectId)
+      .map(t => getEffectiveTransaction(t))
+      .filter((t): t is Transaction => t !== null);
+
     const income = projectTransactions
       .filter((t) => t.type === 'income')
       .reduce((acc, t) => acc + t.amount, 0);
@@ -116,6 +122,33 @@ export default function ProjectsPage() {
       project.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [userVisibleProjects, searchTerm, isLoaded]);
+
+  const summary = useMemo(() => {
+    if (!isLoaded) return { totalIncome: 0, totalExpense: 0, netBalance: 0, totalReceivable: 0, totalPayable: 0, netOutstanding: 0 };
+
+    const effectiveTx = transactions
+      .map(t => getEffectiveTransaction(t))
+      .filter((t): t is Transaction => t !== null);
+
+    const effectiveRecords = recordables
+      .map(r => getEffectiveRecordable(r))
+      .filter((r): r is Recordable => r !== null);
+
+    const totalIncome = effectiveTx.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+    const totalExpense = effectiveTx.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+
+    const totalReceivable = effectiveRecords.filter(r => r.type === 'asset' && r.status === 'pending').reduce((sum, r) => sum + r.amount, 0);
+    const totalPayable = effectiveRecords.filter(r => r.type === 'liability' && r.status === 'pending').reduce((sum, r) => sum + r.amount, 0);
+
+    return {
+      totalIncome,
+      totalExpense,
+      netBalance: totalIncome - totalExpense,
+      totalReceivable,
+      totalPayable,
+      netOutstanding: totalReceivable - totalPayable
+    };
+  }, [transactions, recordables, isLoaded]);
 
   const exportToPDF = () => {
     if (filteredProjects.length === 0) {
@@ -269,9 +302,13 @@ export default function ProjectsPage() {
       doc.text(`Location: ${project.location || 'N/A'} | Generated: ${new Date().toLocaleDateString()}`, 14, 26);
 
       // Calculate financials explicitly from the transactions list to ensure consistency with the table
+      const effectiveTransactions = projectTransactions
+        .map(t => getEffectiveTransaction(t))
+        .filter((t): t is Transaction => t !== null);
+
       let pIncome = 0;
       let pExpenses = 0;
-      projectTransactions.forEach(t => {
+      effectiveTransactions.forEach(t => {
         const amt = Number(t.amount) || 0;
         if (t.type === 'income') pIncome += amt;
         if (t.type === 'expense') pExpenses += amt;
@@ -279,8 +316,12 @@ export default function ProjectsPage() {
       const pNet = pIncome - pExpenses;
 
       // Calculate outstandings
-      const pReceivable = projectOutstandings.filter(r => r.type === 'asset' && r.status === 'pending').reduce((sum, r) => sum + r.amount, 0);
-      const pPayable = projectOutstandings.filter(r => r.type === 'liability' && r.status === 'pending').reduce((sum, r) => sum + r.amount, 0);
+      const effectiveRecords = projectOutstandings
+        .map(r => getEffectiveRecordable(r))
+        .filter((r): r is Recordable => r !== null);
+
+      const pReceivable = effectiveRecords.filter(r => r.type === 'asset' && r.status === 'pending').reduce((sum, r) => sum + r.amount, 0);
+      const pPayable = effectiveRecords.filter(r => r.type === 'liability' && r.status === 'pending').reduce((sum, r) => sum + r.amount, 0);
 
       const overviewY = 35;
 
@@ -489,10 +530,53 @@ export default function ProjectsPage() {
         />
       </div>
 
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <div className="rounded-xl border border-border/50 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 shadow-sm border-l-4 border-l-emerald-500 flex flex-col justify-center">
+          <p className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 upper-case tracking-tighter mb-0.5">Total Income</p>
+          <div className="text-sm font-bold text-emerald-900 dark:text-emerald-300 truncate leading-none">₹{formatCurrency(summary.totalIncome, true)}</div>
+        </div>
+        <div className="rounded-xl border border-border/50 bg-rose-50/50 dark:bg-rose-950/20 p-3 shadow-sm border-l-4 border-l-rose-500 flex flex-col justify-center">
+          <p className="text-[9px] font-bold text-rose-700 dark:text-rose-400 upper-case tracking-tighter mb-0.5">Total Expense</p>
+          <div className="text-sm font-bold text-rose-900 dark:text-rose-300 truncate leading-none">₹{formatCurrency(summary.totalExpense, true)}</div>
+        </div>
+        <div className={cn("rounded-xl border border-border/50 p-3 shadow-sm border-l-4 flex flex-col justify-center", summary.netBalance >= 0 ? "bg-blue-50/50 dark:bg-blue-950/20 border-l-blue-500" : "bg-orange-50/50 dark:bg-orange-950/20 border-l-orange-500")}>
+          <p className={cn("text-[9px] font-bold uppercase tracking-tighter mb-0.5", summary.netBalance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400")}>Net Balance</p>
+          <div className={cn("text-sm font-bold truncate leading-none", summary.netBalance >= 0 ? "text-blue-900 dark:text-blue-300" : "text-orange-900 dark:text-orange-300")}>₹{formatCurrency(summary.netBalance, true)}</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <div className="rounded-xl border border-border/50 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 shadow-sm border-l-4 border-l-emerald-500 flex flex-col justify-center">
+          <p className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 upper-case tracking-tighter mb-0.5">Receivable</p>
+          <div className="text-sm font-bold text-emerald-900 dark:text-emerald-300 truncate leading-none">₹{formatCurrency(summary.totalReceivable, true)}</div>
+        </div>
+        <div className="rounded-xl border border-border/50 bg-rose-50/50 dark:bg-rose-950/20 p-3 shadow-sm border-l-4 border-l-rose-500 flex flex-col justify-center">
+          <p className="text-[9px] font-bold text-rose-700 dark:text-rose-400 upper-case tracking-tighter mb-0.5">Payable</p>
+          <div className="text-sm font-bold text-rose-900 dark:text-rose-300 truncate leading-none">₹{formatCurrency(summary.totalPayable, true)}</div>
+        </div>
+        <div className={cn("rounded-xl border border-border/50 p-3 shadow-sm border-l-4 flex flex-col justify-center", summary.netOutstanding >= 0 ? "bg-blue-50/50 dark:bg-blue-950/20 border-l-blue-500" : "bg-orange-50/50 dark:bg-orange-950/20 border-l-orange-500")}>
+          <p className={cn("text-[9px] font-bold uppercase tracking-tighter mb-0.5", summary.netOutstanding >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400")}>Net Outstanding</p>
+          <div className={cn("text-sm font-bold truncate leading-none", summary.netOutstanding >= 0 ? "text-blue-900 dark:text-blue-300" : "text-orange-900 dark:text-orange-300")}>₹{formatCurrency(summary.netOutstanding, true)}</div>
+        </div>
+      </div>
+
       {!isLoaded ? (
-        <div className="flex flex-col items-center justify-center py-24 space-y-4">
-          <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-          <p className="text-muted-foreground font-medium">Loading projects...</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i} className="rounded-2xl border-border/50 bg-card overflow-hidden">
+              <CardHeader className="pb-2">
+                <Skeleton className="h-6 w-2/3 rounded-lg" />
+                <Skeleton className="h-4 w-1/2 rounded-lg" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex justify-between">
+                  <Skeleton className="h-4 w-1/4 rounded-lg" />
+                  <Skeleton className="h-4 w-1/4 rounded-lg" />
+                </div>
+                <Skeleton className="h-10 w-full rounded-xl" />
+              </CardContent>
+            </Card>
+          ))}
         </div>
       ) : filteredProjects.length > 0 ? (
         <>

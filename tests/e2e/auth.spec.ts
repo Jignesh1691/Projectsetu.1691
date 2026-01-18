@@ -1,32 +1,35 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Authentication Flow', () => {
-    test('should allow user to log in and see dashboard', async ({ page }: { page: any }) => {
+    test('should login successfully with valid credentials', async ({ page }) => {
         // Navigate to login page
         await page.goto('/login');
 
-        // Fill in credentials
-        await page.fill('input[type="email"]', 'admin@acme.com');
-        await page.fill('input[type="password"]', 'Password123!');
+        // Fill login form
+        // Using placeholders is often more robust if labels are styled/transformed
+        await page.getByPlaceholder('name@company.com').fill('admin@acme.com');
+        await page.getByPlaceholder('••••••••').fill('Password123!');
 
-        // Click sign in
-        await page.click('button[type="submit"]');
+        // Submit form
+        await page.getByRole('button', { name: 'Sign In' }).click();
 
-        // Wait for navigation to dashboard
-        await expect(page).toHaveURL(/.*dashboard|.*app|.*admin/);
+        // Verify redirection to dashboard
+        await expect(page).toHaveURL('/dashboard');
 
-        // Check if sidebar is visible
-        await expect(page.locator('nav')).toBeVisible();
-        await expect(page.getByText('ProjectSetu')).toBeVisible();
+        // Verify user name is displayed
+        await expect(page.getByText('Admin User')).toBeVisible();
     });
 
-    test('should show error on invalid credentials', async ({ page }: { page: any }) => {
+    test('should show error with invalid credentials', async ({ page }) => {
         await page.goto('/login');
-        await page.fill('input[type="email"]', 'wrong@example.com');
-        await page.fill('input[type="password"]', 'wrongpass');
-        await page.click('button[type="submit"]');
+
+        await page.getByPlaceholder('name@company.com').fill('admin@acme.com');
+        await page.getByPlaceholder('••••••••').fill('WrongPassword');
+
+        await page.getByRole('button', { name: 'Sign In' }).click();
 
         // Verify error message
-        await expect(page.getByText('Invalid email or password')).toBeVisible();
+        // The error is shown in a div with border-destructive
+        await expect(page.locator('text=Invalid email or password')).toBeVisible();
     });
 });

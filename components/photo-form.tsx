@@ -368,7 +368,7 @@ export function PhotoForm({ setOpen, photo }: PhotoFormProps) {
                 )}
               />
 
-              {isNonAdmin && (
+              {isNonAdmin && photo && (
                 <FormField
                   control={form.control}
                   name="request_message"

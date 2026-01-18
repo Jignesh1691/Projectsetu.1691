@@ -29,9 +29,11 @@ export async function POST(req: Request) {
                 where: { email: invite.email },
                 update: {
                     password: hashedPassword,
+                    name: invite.name || undefined, // Update name if provided in invite
                 },
                 create: {
                     email: invite.email,
+                    name: invite.name || "New User",
                     password: hashedPassword,
                     status: "ACTIVE", // invited users are active upon acceptance
                     emailVerified: new Date(),

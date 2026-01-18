@@ -1,0 +1,5 @@
+﻿app/(app)/cash-bank-book/page.tsx(43,31): error TS2552: Cannot find name 'Transaction'. Did you mean 'IDBTransaction'?
+cypress/e2e/auth.cy.ts(3,12): error TS2551: Property 'login' does not exist on type 'cy & CyEventEmitter'. Did you mean 'log'?
+cypress/e2e/transaction.cy.ts(4,12): error TS2551: Property 'login' does not exist on type 'cy & CyEventEmitter'. Did you mean 'log'?
+cypress/support/commands.ts(1,22): error TS2345: Argument of type '"login"' is not assignable to parameter of type 'keyof Chainable<any>'.
+cypress/support/commands.ts(3,56): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string'.

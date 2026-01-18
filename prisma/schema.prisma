@@ -76,6 +76,9 @@ model Membership {
   userId         String
   organizationId String
   role           Role         @default(USER)
+  canViewFinances Boolean     @default(true)
+  canViewOperations Boolean    @default(true)
+  canCreateEntries Boolean     @default(true)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -85,6 +88,7 @@ model Membership {
 model Invite {
   id             String       @id @default(cuid())
   email          String
+  name           String?
   role           Role         @default(USER)
   token          String       @unique
   expiresAt      DateTime
@@ -120,6 +124,8 @@ model ProjectUser {
   projectId String
   userId    String
   status    String   @default("active") // active, inactive
+  canViewFinances Boolean @default(true)
+  canCreateEntries Boolean @default(true)
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -186,6 +192,7 @@ model Transaction {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
+  @@index([organizationId])
   @@index([createdBy])
 }
 
@@ -222,6 +229,7 @@ model Record {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
+  @@index([organizationId])
   @@index([createdBy])
 }
 
@@ -235,6 +243,8 @@ model Labor {
   hajariRecords  Hajari[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  
+  @@index([organizationId])
 }
 
 model Hajari {
@@ -267,6 +277,7 @@ model Hajari {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   
+  @@index([organizationId])
   @@index([createdBy])
 }
 
@@ -297,6 +308,7 @@ model Task {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   
+  @@index([organizationId])
   @@index([createdBy])
 }
 
@@ -319,6 +331,7 @@ model Material {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
+  @@index([organizationId])
   @@unique([organizationId, name])
 }
 
@@ -353,6 +366,7 @@ model MaterialLedger {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   
+  @@index([organizationId])
   @@index([createdBy])
 }
 
@@ -366,6 +380,8 @@ model Notification {
   type        String   @default("info") // approved, rejected, submitted, info
   isRead      Boolean  @default(false)
   createdAt   DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Photo {
@@ -389,6 +405,7 @@ model Photo {
   
   createdAt      DateTime     @default(now())
   
+  @@index([organizationId])
   @@index([createdBy])
 }
 
@@ -414,6 +431,7 @@ model Document {
   
   createdAt      DateTime     @default(now())
   
+  @@index([organizationId])
   @@index([createdBy])
 }
 
@@ -503,6 +521,7 @@ model JournalEntry {
   rejectionCount  Int?     @default(0)
   pendingData     Json?
   
+  @@index([organizationId])
   @@index([creditLedgerId])
   @@index([createdBy])
 }

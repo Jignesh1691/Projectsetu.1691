@@ -40,7 +40,7 @@ interface QuickEntryFormProps {
 }
 
 export function QuickEntryForm({ setOpen }: QuickEntryFormProps) {
-  const { ledgers, currentUser, userVisibleProjects } = useAppState();
+  const { ledgers, currentUser, userEntryAllowedProjects } = useAppState();
   const { toast } = useToast();
   const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
 
@@ -119,7 +119,7 @@ export function QuickEntryForm({ setOpen }: QuickEntryFormProps) {
               render={({ field }) => (
                 <FormItem className="flex flex-col space-y-1">
                   <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground/70">Project</FormLabel>
-                  <Combobox options={userVisibleProjects.map(p => ({ value: p.id, label: p.name }))} value={field.value} onChange={field.onChange} placeholder="Select a project" searchPlaceholder="Search projects..." notFoundMessage="No project found." className="h-9 md:h-10" />
+                  <Combobox options={userEntryAllowedProjects.map(p => ({ value: p.id, label: p.name }))} value={field.value} onChange={field.onChange} placeholder="Select a project" searchPlaceholder="Search projects..." notFoundMessage="No project found." className="h-9 md:h-10" />
                   <FormMessage />
                 </FormItem>
               )}
@@ -148,20 +148,7 @@ export function QuickEntryForm({ setOpen }: QuickEntryFormProps) {
             />
           </div>
 
-          {!isAdmin && (
-            <FormField
-              name="request_message"
-              render={({ field }) => (
-                <FormItem className="space-y-1">
-                  <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground/70">Note for Approver (Optional)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Why are you making these entries? (e.g., Weekly site expenses)" {...field} className="h-9 md:h-10 rounded-xl" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
+
         </div>
 
         <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">

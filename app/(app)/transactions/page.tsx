@@ -4,6 +4,7 @@
 import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { PlusCircle, Download, FileText, File, FilterX, Filter, View, ArrowRightLeft } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAppState } from '@/hooks/use-store';
 import { TransactionsTable } from '@/components/transactions-table';
 import {
@@ -21,6 +22,7 @@ import { Combobox } from '@/components/ui/combobox';
 import { DatePickerWithRange } from '@/components/ui/date-picker-with-range';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { filterTransactions, formatCurrency, cn } from '@/lib/utils';
+import { getEffectiveTransaction } from '@/lib/financial-utils';
 import type { DateRange } from 'react-day-picker';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -66,6 +68,12 @@ export default function TransactionsPage() {
     let txns = currentUser?.role === 'admin'
       ? transactions
       : transactions.filter(t => userVisibleProjects.some(p => p.id === t.project_id));
+
+    // Exclude Petty Cash transactions from main list
+    txns = txns.filter(t => {
+      const ledger = ledgers.find(l => l.id === t.ledger_id);
+      return !ledger?.name.toLowerCase().endsWith(' petty cash');
+    });
 
     const filtered = filterTransactions(txns, {
       project_id: selectedProject === ALL_PROJECTS ? undefined : selectedProject,
@@ -116,8 +124,14 @@ export default function TransactionsPage() {
 
   const summary = useMemo(() => {
     if (!isLoaded) return { totalIncome: 0, totalExpense: 0, netBalance: 0 };
-    const totalIncome = filteredTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-    const totalExpense = filteredTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+
+    const effectiveTx = filteredTransactions
+      .map(t => getEffectiveTransaction(t))
+      .filter((t): t is Transaction => t !== null);
+
+    const totalIncome = effectiveTx.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+    const totalExpense = effectiveTx.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+
     return {
       totalIncome,
       totalExpense,
@@ -173,8 +187,14 @@ export default function TransactionsPage() {
     // Summary Calculations
     const { totalIncome, totalExpense, netBalance } = (() => {
       if (!isLoaded) return { netBalance: 0, totalIncome: 0, totalExpense: 0 };
-      const currentTotalIncome = filteredTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-      const currentTotalExpense = filteredTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+
+      const effectiveTx = filteredTransactions
+        .map(t => getEffectiveTransaction(t))
+        .filter((t): t is Transaction => t !== null);
+
+      const currentTotalIncome = effectiveTx.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+      const currentTotalExpense = effectiveTx.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+
       return {
         netBalance: currentTotalIncome - currentTotalExpense,
         totalIncome: currentTotalIncome,
@@ -424,17 +444,51 @@ export default function TransactionsPage() {
       </div>
 
       {!isLoaded ? (
-        <Card className="flex flex-col items-center justify-center rounded-3xl border-border/50 bg-card py-24 text-center">
-          <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-          <h3 className="mt-6 text-base font-bold tracking-tight">Loading Transactions...</h3>
-          <p className="text-muted-foreground text-sm">Syncing with your workspace data.</p>
-        </Card>
-      ) : filteredTransactions.length > 0 ? (
         <Card className="border-border/50 shadow-sm rounded-2xl overflow-hidden bg-card">
           <CardContent className="p-0">
-            <TransactionsTable transactions={filteredTransactions} onEdit={handleEdit} onView={setViewingTransaction} />
+            <div className="space-y-4 p-4">
+              <div className="flex justify-between border-b pb-4">
+                <Skeleton className="h-4 w-1/6" />
+                <Skeleton className="h-4 w-1/4" />
+                <Skeleton className="h-4 w-1/4" />
+                <Skeleton className="h-4 w-1/6" />
+              </div>
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="flex justify-between items-center py-2">
+                  <Skeleton className="h-4 w-1/6" />
+                  <div className="space-y-2 w-1/4">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-3 w-2/3" />
+                  </div>
+                  <Skeleton className="h-4 w-1/4" />
+                  <Skeleton className="h-6 w-1/6 rounded-full" />
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
+      ) : filteredTransactions.length > 0 ? (
+        <div className="space-y-4">
+          <Card className="border-border/50 shadow-sm rounded-2xl overflow-hidden bg-card">
+            <CardContent className="p-0">
+              <TransactionsTable transactions={filteredTransactions} onEdit={handleEdit} onView={setViewingTransaction} />
+            </CardContent>
+          </Card>
+          {(useAppState() as any).has_more_transactions && (
+            <div className="flex justify-center py-4">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  const { fetchMoreTransactions } = await import('@/lib/store');
+                  await fetchMoreTransactions();
+                }}
+                className="rounded-xl border-primary/20 text-primary hover:bg-primary/5 px-8"
+              >
+                Load More Transactions
+              </Button>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-24 text-center rounded-3xl bg-muted/20 border-2 border-dashed border-border/50">
           <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mb-6">

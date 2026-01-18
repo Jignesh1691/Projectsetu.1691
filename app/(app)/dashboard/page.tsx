@@ -23,6 +23,7 @@ import { useAppState } from '@/hooks/use-store';
 import { formatCurrency, cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { getEffectiveTransaction, getEffectiveRecordable } from '@/lib/financial-utils';
 import type { Transaction, Recordable, Task, Photo, Document as AppDocument, Hajari, Material, MaterialLedgerEntry } from '@/lib/definitions';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
@@ -110,7 +111,7 @@ RecentActivityItem.displayName = 'RecentActivityItem';
 
 
 export default function DashboardPage() {
-    const { appUser, projects, transactions, recordables, tasks, photos, documents, hajari_records, materials, material_ledger, isLoaded } = useAppState();
+    const { appUser, projects, transactions, recordables, tasks, photos, documents, hajari_records, materials, material_ledger, isLoaded, records_loaded, transactions_loaded } = useAppState();
     const [hasMounted, setHasMounted] = useState(false);
 
     useEffect(() => {
@@ -120,7 +121,7 @@ export default function DashboardPage() {
 
 
     const recentActivity = useMemo(() => {
-        if (!isLoaded) return [];
+        if (!isLoaded || !records_loaded || !transactions_loaded) return [];
         const allItems = [
             ...transactions.map(item => ({ ...item, itemType: 'transaction' as const, date: new Date(item.date) })),
             ...recordables.map(item => ({ ...item, itemType: 'recordable' as const, date: new Date(item.due_date) })),
@@ -138,11 +139,21 @@ export default function DashboardPage() {
     }, [transactions, recordables, tasks, photos, documents, hajari_records, materials, material_ledger, isLoaded]);
 
     const { totalIncome, totalExpense, netBalance, totalReceivable, totalPayable, netOutstanding } = useMemo(() => {
-        if (!isLoaded) return { totalIncome: 0, totalExpense: 0, netBalance: 0, totalReceivable: 0, totalPayable: 0, netOutstanding: 0 };
-        const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-        const totalExpense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
-        const totalReceivable = recordables.filter(t => t.type === 'asset' && t.status === 'pending').reduce((sum, t) => sum + t.amount, 0);
-        const totalPayable = recordables.filter(t => t.type === 'liability' && t.status === 'pending').reduce((sum, t) => sum + t.amount, 0);
+        if (!isLoaded || !records_loaded || !transactions_loaded) return { totalIncome: 0, totalExpense: 0, netBalance: 0, totalReceivable: 0, totalPayable: 0, netOutstanding: 0 };
+
+        const effectiveTransactions = transactions
+            .map(t => getEffectiveTransaction(t))
+            .filter((t): t is Transaction => t !== null);
+
+        const effectiveRecords = recordables
+            .map(r => getEffectiveRecordable(r))
+            .filter((r): r is Recordable => r !== null);
+
+        const totalIncome = effectiveTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+        const totalExpense = effectiveTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+        const totalReceivable = effectiveRecords.filter(t => t.type === 'asset' && t.status === 'pending').reduce((sum, t) => sum + t.amount, 0);
+        const totalPayable = effectiveRecords.filter(t => t.type === 'liability' && t.status === 'pending').reduce((sum, t) => sum + t.amount, 0);
+
         return {
             totalIncome,
             totalExpense,
@@ -151,7 +162,7 @@ export default function DashboardPage() {
             totalPayable,
             netOutstanding: totalReceivable - totalPayable
         }
-    }, [transactions, recordables, isLoaded]);
+    }, [transactions, recordables, isLoaded, records_loaded, transactions_loaded]);
 
 
     const transactionOverviewItems = [
@@ -182,8 +193,8 @@ export default function DashboardPage() {
                                 <CardHeader className="flex flex-row items-center justify-between p-3 md:p-4 lg:p-6 pb-1 md:pb-1 lg:pb-2">
                                     <div className="space-y-0.5 lg:space-y-2">
                                         <CardTitle className="text-xs lg:text-sm font-bold uppercase tracking-widest text-muted-foreground/80">Transactions</CardTitle>
-                                        <div className={cn("text-base md:text-2xl lg:text-4xl font-black tracking-tighter", netBalance >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
-                                            {formatCurrency(netBalance).replace(/\.00$/, '')}
+                                        <div className={cn("text-base md:text-2xl lg:text-4xl font-medium tracking-tighter", netBalance >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
+                                            {netBalance > 0 ? '+' : ''}{formatCurrency(netBalance).replace(/\.00$/, '')}
                                         </div>
                                     </div>
                                     <div className="h-8 w-8 md:h-11 md:w-11 lg:h-14 lg:w-14 bg-primary/10 border border-primary/20 rounded-lg md:rounded-2xl flex items-center justify-center lg:shadow-inner bg-gradient-to-br from-primary/20 to-transparent">
@@ -228,8 +239,8 @@ export default function DashboardPage() {
                                 <CardHeader className="flex flex-row items-center justify-between p-3 md:p-4 lg:p-6 pb-1 md:pb-1 lg:pb-2">
                                     <div className="space-y-0.5 lg:space-y-2">
                                         <CardTitle className="text-xs lg:text-sm font-bold uppercase tracking-widest text-muted-foreground/80">Outstanding</CardTitle>
-                                        <div className={cn("text-base md:text-2xl lg:text-4xl font-black tracking-tighter", netOutstanding >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
-                                            {formatCurrency(netOutstanding).replace(/\.00$/, '')}
+                                        <div className={cn("text-base md:text-2xl lg:text-4xl font-medium tracking-tighter", netOutstanding >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
+                                            {netOutstanding > 0 ? '+' : ''}{formatCurrency(netOutstanding).replace(/\.00$/, '')}
                                         </div>
                                     </div>
                                     <div className="h-8 w-8 md:h-11 md:w-11 lg:h-14 lg:w-14 bg-amber-500/10 border border-amber-500/20 rounded-lg md:rounded-2xl flex items-center justify-center lg:shadow-inner bg-gradient-to-bl from-amber-500/20 to-transparent">
@@ -284,7 +295,7 @@ export default function DashboardPage() {
                                 </div>
                             </CardHeader>
                             <CardContent className="p-0 flex-1 overflow-auto">
-                                {!isLoaded ? (
+                                {!isLoaded || !records_loaded || !transactions_loaded ? (
                                     <div className="flex flex-col items-center justify-center py-12 space-y-4">
                                         <div className="w-6 h-6 border-2 border-primary/20 border-t-primary rounded-full animate-spin"></div>
                                         <p className="text-muted-foreground text-xs font-medium uppercase tracking-widest">Initialising...</p>

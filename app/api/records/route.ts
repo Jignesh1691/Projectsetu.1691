@@ -23,7 +23,8 @@ export async function GET(req: Request) {
             const assignedProjects = await prisma.projectUser.findMany({
                 where: {
                     userId,
-                    status: 'active'
+                    status: 'active',
+                    canViewFinances: true
                 },
                 select: { projectId: true }
             });
@@ -35,6 +36,9 @@ export async function GET(req: Request) {
 
         const { searchParams } = new URL(req.url);
         const createdBy = searchParams.get('createdBy');
+        const limit = parseInt(searchParams.get('limit') || '100');
+        const page = parseInt(searchParams.get('page') || '1');
+        const skip = (page - 1) * limit;
 
         const records = await prisma.record.findMany({
             where: {
@@ -52,6 +56,8 @@ export async function GET(req: Request) {
                 }
             },
             orderBy: { dueDate: 'desc' },
+            take: limit,
+            skip: skip,
         });
 
         return NextResponse.json(records);
@@ -79,11 +85,21 @@ export async function POST(req: Request) {
 
         // Project access check for non-admins
         if (userRole !== 'admin') {
-            const projectUsers = await prisma.projectUser.findMany({
-                where: { userId: session.user.id }
+            const projectUser = await prisma.projectUser.findUnique({
+                where: {
+                    projectId_userId: {
+                        projectId,
+                        userId: session.user.id
+                    }
+                }
             });
-            if (!canAccessProject(projectId, session.user.id, userRole, projectUsers as any)) {
+
+            if (!projectUser || projectUser.status !== 'active') {
                 return NextResponse.json({ error: "You don't have access to this project" }, { status: 403 });
+            }
+
+            if (!projectUser.canCreateEntries) {
+                return NextResponse.json({ error: "You don't have permission to create financial entries for this project" }, { status: 403 });
             }
         }
 

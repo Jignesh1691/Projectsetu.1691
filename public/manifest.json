@@ -29,11 +29,18 @@
     ],
     "screenshots": [
         {
-            "src": "/icon-512.png",
-            "sizes": "512x512",
+            "src": "/screenshot-desktop.png",
+            "sizes": "1280x720",
+            "type": "image/png",
+            "form_factor": "wide",
+            "label": "ProjectSetu Desktop Dashboard"
+        },
+        {
+            "src": "/screenshot-mobile.png",
+            "sizes": "720x1280",
             "type": "image/png",
             "form_factor": "narrow",
-            "label": "ProjectSetu - Construction Management Simplified"
+            "label": "ProjectSetu Mobile App"
         }
     ]
 }

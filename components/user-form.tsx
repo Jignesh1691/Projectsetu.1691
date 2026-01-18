@@ -36,6 +36,9 @@ const formSchema = z.object({
     confirmPassword: z.string().optional(),
     assignedProjects: z.array(z.string()),
     isActive: z.boolean(),
+    canViewFinances: z.boolean(),
+    canViewOperations: z.boolean(),
+    canCreateEntries: z.boolean(),
 }).refine(data => {
     if (data.role === 'admin') {
         return true;
@@ -79,6 +82,9 @@ export function UserForm({ setOpen, user, onSuccess }: UserFormProps) {
             password: '',
             assignedProjects: userProjects,
             isActive: user.isActive !== false,
+            canViewFinances: user.canViewFinances !== false,
+            canViewOperations: user.canViewOperations !== false,
+            canCreateEntries: user.canCreateEntries !== false,
         } : {
             name: '',
             email: '',
@@ -86,6 +92,9 @@ export function UserForm({ setOpen, user, onSuccess }: UserFormProps) {
             password: '',
             assignedProjects: [],
             isActive: true,
+            canViewFinances: true,
+            canViewOperations: true,
+            canCreateEntries: true,
         },
     });
 
@@ -99,7 +108,10 @@ export function UserForm({ setOpen, user, onSuccess }: UserFormProps) {
                 name: values.name,
                 role: values.role,
                 isActive: values.isActive,
-                assignedProjects: values.assignedProjects
+                assignedProjects: values.assignedProjects,
+                canViewFinances: values.canViewFinances,
+                canViewOperations: values.canViewOperations,
+                canCreateEntries: values.canCreateEntries,
             }
             if (values.newPassword) {
                 updateData.password = values.newPassword;
@@ -282,6 +294,74 @@ export function UserForm({ setOpen, user, onSuccess }: UserFormProps) {
                                         </FormItem>
                                     )}
                                 />
+
+                                <Separator />
+                                <div className="space-y-3 pt-1">
+                                    <h3 className="text-xs font-bold uppercase text-muted-foreground/70">Permissions</h3>
+
+                                    <FormField
+                                        control={form.control}
+                                        name="canViewFinances"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-xl border p-3">
+                                                <div className="space-y-0.5">
+                                                    <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground/70">Financial Access</FormLabel>
+                                                    <FormDescription className="text-[10px]">
+                                                        Can view ledgers, transactions, and reports.
+                                                    </FormDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Switch
+                                                        checked={field.value}
+                                                        onCheckedChange={field.onChange}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name="canViewOperations"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-xl border p-3">
+                                                <div className="space-y-0.5">
+                                                    <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground/70">Operation Access</FormLabel>
+                                                    <FormDescription className="text-[10px]">
+                                                        Can view materials, tasks, and attendance.
+                                                    </FormDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Switch
+                                                        checked={field.value}
+                                                        onCheckedChange={field.onChange}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name="canCreateEntries"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-center justify-between rounded-xl border p-3">
+                                                <div className="space-y-0.5">
+                                                    <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground/70">Create Entries</FormLabel>
+                                                    <FormDescription className="text-[10px]">
+                                                        Can create new transactions and records.
+                                                    </FormDescription>
+                                                </div>
+                                                <FormControl>
+                                                    <Switch
+                                                        checked={field.value}
+                                                        onCheckedChange={field.onChange}
+                                                    />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
                             </>
                         )}
                     </div>

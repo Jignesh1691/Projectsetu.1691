@@ -23,6 +23,17 @@ export async function GET(req: Request) {
             include: {
                 _count: {
                     select: { transactions: true }
+                },
+                projectUsers: {
+                    where: {
+                        userId: session.user.id
+                    },
+                    select: {
+                        userId: true,
+                        projectId: true,
+                        canViewFinances: true,
+                        canCreateEntries: true
+                    }
                 }
             }
         });
@@ -33,7 +44,19 @@ export async function GET(req: Request) {
     }
 }
 
+import { ratelimit } from "@/lib/rate-limit";
+
 export async function POST(req: Request) {
+    const ip = req.headers.get("x-forwarded-for") ?? "anonymous";
+    const { success } = await ratelimit.limit(ip);
+
+    if (!success) {
+        return NextResponse.json(
+            { error: "Too many requests. Please try again later." },
+            { status: 429 }
+        );
+    }
+
     const session = await auth();
 
     if (!session || session.user.role?.toUpperCase() !== "ADMIN") {
@@ -76,10 +99,12 @@ export async function POST(req: Request) {
 
             if (assigned_users && assigned_users.length > 0) {
                 await tx.projectUser.createMany({
-                    data: assigned_users.map((userId: string) => ({
+                    data: assigned_users.map((item: any) => ({
                         projectId: newProject.id,
-                        userId: userId,
-                        status: 'active'
+                        userId: typeof item === 'string' ? item : item.userId,
+                        status: 'active',
+                        canViewFinances: typeof item === 'string' ? true : item.canViewFinances,
+                        canCreateEntries: typeof item === 'string' ? true : item.canCreateEntries,
                     }))
                 });
             }
@@ -142,10 +167,12 @@ export async function PUT(req: Request) {
             // Create new assignments
             if (assigned_users.length > 0) {
                 await prisma.projectUser.createMany({
-                    data: assigned_users.map((userId: string) => ({
+                    data: assigned_users.map((item: any) => ({
                         projectId: id,
-                        userId: userId,
-                        status: 'active'
+                        userId: typeof item === 'string' ? item : item.userId,
+                        status: 'active',
+                        canViewFinances: typeof item === 'string' ? true : item.canViewFinances,
+                        canCreateEntries: typeof item === 'string' ? true : item.canCreateEntries,
                     }))
                 });
             }

@@ -19,7 +19,12 @@ export async function GET(req: Request) {
             where: {
                 organizationId: organizationId,
             },
-            include: {
+            select: {
+                id: true,
+                role: true,
+                canViewFinances: true,
+                canViewOperations: true,
+                canCreateEntries: true,
                 user: {
                     select: {
                         id: true,
@@ -29,7 +34,9 @@ export async function GET(req: Request) {
                         image: true,
                         projectUsers: {
                             select: {
-                                projectId: true
+                                projectId: true,
+                                canViewFinances: true,
+                                canCreateEntries: true,
                             }
                         }
                     },
@@ -40,13 +47,20 @@ export async function GET(req: Request) {
         const formattedMembers = members.map((member) => ({
             id: member.id,
             role: member.role.toLowerCase(),
+            canViewFinances: member.canViewFinances,
+            canViewOperations: member.canViewOperations,
+            canCreateEntries: member.canCreateEntries,
             user: {
                 id: member.user.id,
                 name: member.user.name || "Unknown",
                 email: member.user.email,
                 isActive: member.user.status === 'ACTIVE',
                 image: member.user.image,
-                assignedProjects: member.user.projectUsers.map(pu => pu.projectId)
+                assignedProjects: member.user.projectUsers.map(pu => ({
+                    projectId: pu.projectId,
+                    canViewFinances: pu.canViewFinances,
+                    canCreateEntries: pu.canCreateEntries
+                }))
             },
         }));
 
@@ -64,7 +78,7 @@ export async function POST(req: Request) {
     }
 
     try {
-        const { name, email, role, password, isActive, assignedProjects } = await req.json();
+        const { name, email, role, password, isActive, assignedProjects, canViewFinances, canViewOperations, canCreateEntries } = await req.json();
 
         if (!email || !role) {
             return NextResponse.json({ error: "Missing email or role" }, { status: 400 });
@@ -93,6 +107,9 @@ export async function POST(req: Request) {
                     userId: user.id,
                     organizationId: session.user.organizationId as string,
                     role: role.toUpperCase() as any,
+                    canViewFinances: canViewFinances ?? true,
+                    canViewOperations: canViewOperations ?? true,
+                    canCreateEntries: canCreateEntries ?? true,
                 },
                 include: { user: true }
             });
@@ -100,11 +117,16 @@ export async function POST(req: Request) {
             // 3. Handle project assignments
             if (assignedProjects && Array.isArray(assignedProjects) && assignedProjects.length > 0) {
                 await tx.projectUser.createMany({
-                    data: assignedProjects.map((projectId: string) => ({
-                        projectId,
-                        userId: user!.id,
-                        status: 'active'
-                    }))
+                    data: assignedProjects.map((p: any) => {
+                        const projectId = typeof p === 'string' ? p : p.projectId;
+                        return {
+                            projectId,
+                            userId: user!.id,
+                            status: 'active',
+                            canViewFinances: typeof p === 'object' ? p.canViewFinances : false,
+                            canCreateEntries: typeof p === 'object' ? p.canCreateEntries : false,
+                        };
+                    })
                 });
             }
 
@@ -135,7 +157,7 @@ export async function PUT(req: Request) {
     }
 
     try {
-        const { id, role, isActive, name, assignedProjects } = await req.json();
+        const { id, role, isActive, name, assignedProjects, canViewFinances, canViewOperations, canCreateEntries } = await req.json();
 
         if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
@@ -153,6 +175,9 @@ export async function PUT(req: Request) {
                 where: { id },
                 data: {
                     role: role ? role.toUpperCase() as any : undefined,
+                    canViewFinances: canViewFinances !== undefined ? canViewFinances : undefined,
+                    canViewOperations: canViewOperations !== undefined ? canViewOperations : undefined,
+                    canCreateEntries: canCreateEntries !== undefined ? canCreateEntries : undefined,
                 },
                 include: { user: true }
             });
@@ -177,11 +202,16 @@ export async function PUT(req: Request) {
                 // Create new assignments
                 if (assignedProjects.length > 0) {
                     await tx.projectUser.createMany({
-                        data: assignedProjects.map((projectId: string) => ({
-                            projectId,
-                            userId: updatedMembership.userId,
-                            status: 'active'
-                        }))
+                        data: assignedProjects.map((p: any) => {
+                            const projectId = typeof p === 'string' ? p : p.projectId;
+                            return {
+                                projectId,
+                                userId: updatedMembership.userId,
+                                status: 'active',
+                                canViewFinances: typeof p === 'object' ? p.canViewFinances : false,
+                                canCreateEntries: typeof p === 'object' ? p.canCreateEntries : false,
+                            };
+                        })
                     });
                 }
             }

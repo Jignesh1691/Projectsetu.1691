@@ -6,6 +6,9 @@ export type User = {
   email: string;
   role: Role;
   isActive: boolean;
+  canViewFinances?: boolean;
+  canViewOperations?: boolean;
+  canCreateEntries?: boolean;
   password?: string;
   mustChangePassword?: boolean;
   organizationName?: string;
@@ -29,6 +32,8 @@ export type ProjectUser = {
   project_id: string;
   user_id: string;
   status: ProjectUserStatus;
+  can_view_finances?: boolean;
+  can_create_entries?: boolean;
 }
 
 export type Ledger = Approvable & {

@@ -24,6 +24,7 @@ import { useState } from 'react';
 
 const formSchema = z.object({
   email: z.string().email('Please enter a valid email address.'),
+  name: z.string().min(2, 'Name must be at least 2 characters.'),
   role: z.enum(['admin', 'user']),
 });
 
@@ -40,6 +41,7 @@ export function InviteUserForm({ setOpen, onSuccess }: InviteUserFormProps) {
     resolver: zodResolver(formSchema),
     defaultValues: {
       email: '',
+      name: '',
       role: 'user',
     },
   });
@@ -84,6 +86,19 @@ export function InviteUserForm({ setOpen, onSuccess }: InviteUserFormProps) {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Full Name</FormLabel>
+              <FormControl>
+                <Input placeholder="John Doe" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
         <FormField
           control={form.control}
           name="email"

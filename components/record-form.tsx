@@ -62,7 +62,7 @@ const CREATE_NEW_VALUE = 'create-new';
 type FormValues = z.infer<typeof formSchema>;
 
 export function RecordForm({ setOpen, record }: RecordFormProps) {
-  const { ledgers, currentUser, userVisibleProjects, appUser } = useAppState();
+  const { ledgers, currentUser, userEntryAllowedProjects, appUser } = useAppState();
   const { toast } = useToast();
 
   const [isProjectDialogOpen, setProjectDialogOpen] = useState(false);
@@ -289,7 +289,7 @@ export function RecordForm({ setOpen, record }: RecordFormProps) {
                       <Combobox
                         options={
                           (appUser?.role === 'admin' ? [{ value: CREATE_NEW_VALUE, label: 'Create new project...' }] : []).concat(
-                            userVisibleProjects.map(p => ({ value: p.id, label: p.name }))
+                            userEntryAllowedProjects.map(p => ({ value: p.id, label: p.name }))
                           )
                         }
                         value={field.value}
@@ -362,7 +362,7 @@ export function RecordForm({ setOpen, record }: RecordFormProps) {
                 )}
               />
 
-              {isNonAdmin && (
+              {isNonAdmin && record && (
                 <FormField
                   control={form.control}
                   name="request_message"

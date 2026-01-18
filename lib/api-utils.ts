@@ -63,5 +63,12 @@ export const JournalEntrySchema = z.object({
 export const ProjectSchema = z.object({
     name: z.string().min(2),
     location: z.string().optional().nullable(),
-    assigned_users: z.array(z.string()).optional(),
+    assigned_users: z.array(z.union([
+        z.string(),
+        z.object({
+            userId: z.string(),
+            canViewFinances: z.boolean().default(true),
+            canCreateEntries: z.boolean().default(true),
+        })
+    ])).optional(),
 });

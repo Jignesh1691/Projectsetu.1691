@@ -3,7 +3,7 @@
 import { updateState } from './state-manager';
 import { Project, ProjectUser, Transaction, Photo, Document as AppDocument } from '../definitions';
 
-export const addProject = async (projectData: Omit<Project, 'id'>, assigned_users: string[] = []) => {
+export const addProject = async (projectData: Omit<Project, 'id'>, assigned_users: (string | { userId: string, canViewFinances: boolean, canCreateEntries: boolean })[] = []) => {
     try {
         const response = await fetch('/api/projects', {
             method: 'POST',
@@ -22,10 +22,12 @@ export const addProject = async (projectData: Omit<Project, 'id'>, assigned_user
         const newProject = await response.json();
 
         updateState(prev => {
-            const newProjectUsers = assigned_users.map(userId => ({
+            const newProjectUsers = assigned_users.map(item => ({
                 project_id: newProject.id,
-                user_id: userId,
-                status: 'active'
+                user_id: typeof item === 'string' ? item : item.userId,
+                status: 'active',
+                can_view_finances: typeof item === 'string' ? true : item.canViewFinances,
+                can_create_entries: typeof item === 'string' ? true : item.canCreateEntries,
             }));
 
             return {
@@ -41,7 +43,7 @@ export const addProject = async (projectData: Omit<Project, 'id'>, assigned_user
     }
 };
 
-export const editProject = async (id: string, projectData: Partial<Project>, assigned_users: string[]) => {
+export const editProject = async (id: string, projectData: Partial<Project>, assigned_users: (string | { userId: string, canViewFinances: boolean, canCreateEntries: boolean })[]) => {
     try {
         const response = await fetch('/api/projects', {
             method: 'PUT',
@@ -65,10 +67,12 @@ export const editProject = async (id: string, projectData: Partial<Project>, ass
             updatedProjects[projectIndex] = updatedProject;
 
             const otherProjectUsers = prev.project_users.filter((pu: ProjectUser) => pu.project_id !== id);
-            const newProjectUsers = assigned_users.map(userId => ({
+            const newProjectUsers = assigned_users.map(item => ({
                 project_id: id,
-                user_id: userId,
-                status: 'active'
+                user_id: typeof item === 'string' ? item : item.userId,
+                status: 'active',
+                can_view_finances: typeof item === 'string' ? true : item.canViewFinances,
+                can_create_entries: typeof item === 'string' ? true : item.canCreateEntries,
             }));
 
             return { ...prev, projects: updatedProjects, project_users: [...otherProjectUsers, ...newProjectUsers] };

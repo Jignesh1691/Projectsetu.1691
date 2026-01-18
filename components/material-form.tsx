@@ -104,7 +104,7 @@ export function MaterialForm({ setOpen, material }: MaterialFormProps) {
           )}
         />
 
-        {isNonAdmin && (
+        {isNonAdmin && material && (
           <FormField
             control={form.control}
             name="request_message"

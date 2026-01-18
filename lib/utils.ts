@@ -10,21 +10,23 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number, pdfExport = false) {
-  const absoluteAmount = Math.abs(amount);
+  // We no longer strip the sign.
+  // Unless specifically requested otherwise, we show standard currency formatting.
 
   if (pdfExport) {
-    // Return only the number for PDF export, as the symbol is handled separately
+    // For PDF, we just want the number but formatted with commas.
+    // If negative, it should show -1,234.00
     return new Intl.NumberFormat('en-IN', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(absoluteAmount);
+    }).format(amount);
   }
 
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
-    signDisplay: 'never',
-  }).format(absoluteAmount);
+    // We remove explicit 'signDisplay: never' so default behavior (showing - for negative) applies.
+  }).format(amount);
 }
 
 type FilterOptions = {

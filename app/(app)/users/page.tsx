@@ -37,11 +37,15 @@ type Membership = {
     isActive: boolean;
     image?: string | null;
     assignedProjects?: string[];
-  }
+  };
+  canViewFinances: boolean;
+  canViewOperations: boolean;
+  canCreateEntries: boolean;
 }
 type Invitation = {
   id: string;
   email: string;
+  name?: string;
   role: 'admin' | 'user';
   status: 'pending' | 'accepted' | 'expired';
   expiresAt: string;
@@ -256,6 +260,7 @@ export default function UsersPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/10 hover:bg-muted/10">
+                    <TableHead className="px-6 font-bold uppercase text-[10px] tracking-widest text-muted-foreground">Name</TableHead>
                     <TableHead className="px-6 font-bold uppercase text-[10px] tracking-widest text-muted-foreground">Email Address</TableHead>
                     <TableHead className="px-6 font-bold uppercase text-[10px] tracking-widest text-muted-foreground">Assigned Role</TableHead>
                     <TableHead className="px-6 font-bold uppercase text-[10px] tracking-widest text-muted-foreground">Status / Expiry</TableHead>
@@ -267,7 +272,8 @@ export default function UsersPage() {
                     <TableRow><TableCell colSpan={4} className="h-32 text-center text-muted-foreground">Loading invitations...</TableCell></TableRow>
                   ) : invitations.length > 0 ? invitations.map((invite) => (
                     <TableRow key={invite.id} className="hover:bg-muted/5 transition-colors">
-                      <TableCell className="px-6 py-4 font-medium text-foreground">{invite.email}</TableCell>
+                      <TableCell className="px-6 py-4 font-medium text-foreground">{invite.name || '-'}</TableCell>
+                      <TableCell className="px-6 py-4 text-muted-foreground">{invite.email}</TableCell>
                       <TableCell className="px-6 py-4"><Badge variant="secondary" className="capitalize rounded-lg bg-muted text-muted-foreground">{invite.role}</Badge></TableCell>
                       <TableCell className="px-6 py-4">
                         <div className="flex flex-col gap-1">
@@ -331,8 +337,11 @@ export default function UsersPage() {
                 user={{
                   ...editingMember.user,
                   role: editingMember.role as 'admin' | 'user',
-                  id: editingMember.id // We use membership ID for the API as per current implementation, but UserForm uses user.id for editUser?
-                } as User}
+                  id: editingMember.id,
+                  canViewFinances: editingMember.canViewFinances,
+                  canViewOperations: editingMember.canViewOperations,
+                  canCreateEntries: editingMember.canCreateEntries
+                } as any}
                 onSuccess={() => fetchData()}
               />
             )}

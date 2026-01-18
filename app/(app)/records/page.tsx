@@ -4,6 +4,7 @@
 import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { PlusCircle, ReceiptText, Download, FilterX, File, FileText, Filter, View } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAppState } from '@/hooks/use-store';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { Recordable, PaymentMode } from '@/lib/definitions';
@@ -15,6 +16,7 @@ import { Combobox } from '@/components/ui/combobox';
 import { DatePickerWithRange } from '@/components/ui/date-picker-with-range';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { filterRecordables, formatCurrency, cn } from '@/lib/utils';
+import { getEffectiveRecordable } from '@/lib/financial-utils';
 import type { DateRange } from 'react-day-picker';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -31,7 +33,7 @@ const ALL_PAYMENT_MODES = 'all';
 const ALL_USERS = 'all-users';
 
 export default function RecordsPage() {
-  const { recordables, currentUser, userVisibleProjects, projects, ledgers, users, isLoaded } = useAppState();
+  const { recordables, currentUser, userVisibleProjects, projects, ledgers, users, isLoaded, records_loaded } = useAppState();
   const { toast } = useToast();
   const [isSheetOpen, setSheetOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<Recordable | undefined>(undefined);
@@ -61,7 +63,7 @@ export default function RecordsPage() {
   }, [ledgers]);
 
   const filteredRecords = useMemo(() => {
-    if (!isLoaded) return [];
+    if (!records_loaded) return [];
     let records = currentUser?.role === 'admin'
       ? recordables
       : recordables.filter(r => userVisibleProjects.some(p => p.id === r.project_id));
@@ -122,15 +124,21 @@ export default function RecordsPage() {
   const isFiltered = selectedProject !== ALL_PROJECTS || selectedLedger !== ALL_LEDGERS || selectedUser !== ALL_USERS || dateRange?.from || paymentMode !== ALL_PAYMENT_MODES || selectedType !== 'all' || selectedStatus !== 'all';
 
   const summary = useMemo(() => {
-    if (!isLoaded) return { totalReceivable: 0, totalPayable: 0, netOutstanding: 0 };
-    const totalReceivable = filteredRecords.filter(t => t.type === 'asset' && t.status === 'pending').reduce((sum, t) => sum + t.amount, 0);
-    const totalPayable = filteredRecords.filter(t => t.type === 'liability' && t.status === 'pending').reduce((sum, t) => sum + t.amount, 0);
+    if (!records_loaded) return { totalReceivable: 0, totalPayable: 0, netOutstanding: 0 };
+
+    const effectiveRecords = filteredRecords
+      .map(r => getEffectiveRecordable(r))
+      .filter((r): r is Recordable => r !== null);
+
+    const totalReceivable = effectiveRecords.filter(t => t.type === 'asset' && t.status === 'pending').reduce((sum, t) => sum + t.amount, 0);
+    const totalPayable = effectiveRecords.filter(t => t.type === 'liability' && t.status === 'pending').reduce((sum, t) => sum + t.amount, 0);
+
     return {
       totalReceivable,
       totalPayable,
       netOutstanding: totalReceivable - totalPayable
     };
-  }, [filteredRecords, isLoaded]);
+  }, [filteredRecords, records_loaded]);
 
   const getProjectName = (id: string) => projects.find((p) => p.id === id)?.name || 'N/A';
   const getLedgerName = (id: string) => ledgers.find((l) => l.id === id)?.name || 'N/A';
@@ -181,8 +189,14 @@ export default function RecordsPage() {
     // Summary Calculations
     const { totalReceivable, totalPayable, netOutstanding } = (() => {
       if (!isLoaded) return { totalReceivable: 0, totalPayable: 0, netOutstanding: 0 };
-      const totalReceivable = filteredRecords.filter(t => t.type === 'asset' && t.status === 'pending').reduce((sum, t) => sum + t.amount, 0);
-      const totalPayable = filteredRecords.filter(t => t.type === 'liability' && t.status === 'pending').reduce((sum, t) => sum + t.amount, 0);
+
+      const effectiveRecords = filteredRecords
+        .map(r => getEffectiveRecordable(r))
+        .filter((r): r is Recordable => r !== null);
+
+      const totalReceivable = effectiveRecords.filter(t => t.type === 'asset' && t.status === 'pending').reduce((sum, t) => sum + t.amount, 0);
+      const totalPayable = effectiveRecords.filter(t => t.type === 'liability' && t.status === 'pending').reduce((sum, t) => sum + t.amount, 0);
+
       return {
         totalReceivable,
         totalPayable,
@@ -465,18 +479,52 @@ export default function RecordsPage() {
         </div>
       </div>
 
-      {!isLoaded ? (
-        <Card className="flex flex-col items-center justify-center rounded-3xl border-border/50 bg-card py-24 text-center">
-          <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-          <h3 className="mt-6 text-base font-bold tracking-tight">Loading Records...</h3>
-          <p className="text-muted-foreground text-sm">Syncing with your workspace data.</p>
-        </Card>
-      ) : filteredRecords.length > 0 ? (
+      {!records_loaded ? (
         <Card className="border-border/50 shadow-sm rounded-2xl overflow-hidden bg-card">
           <CardContent className="p-0">
-            <RecordsTable recordables={filteredRecords} onEdit={handleEdit} onView={setViewingRecord} />
+            <div className="space-y-4 p-4">
+              <div className="flex justify-between border-b pb-4">
+                <Skeleton className="h-4 w-1/6" />
+                <Skeleton className="h-4 w-1/4" />
+                <Skeleton className="h-4 w-1/4" />
+                <Skeleton className="h-4 w-1/6" />
+              </div>
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="flex justify-between items-center py-2">
+                  <Skeleton className="h-4 w-1/6" />
+                  <div className="space-y-2 w-1/4">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-3 w-2/3" />
+                  </div>
+                  <Skeleton className="h-4 w-1/4" />
+                  <Skeleton className="h-6 w-1/6 rounded-full" />
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
+      ) : filteredRecords.length > 0 ? (
+        <div className="space-y-4">
+          <Card className="border-border/50 shadow-sm rounded-2xl overflow-hidden bg-card">
+            <CardContent className="p-0">
+              <RecordsTable recordables={filteredRecords} onEdit={handleEdit} onView={setViewingRecord} />
+            </CardContent>
+          </Card>
+          {(useAppState() as any).has_more_records && (
+            <div className="flex justify-center py-4">
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  const { fetchMoreRecords } = await import('@/lib/store');
+                  await fetchMoreRecords();
+                }}
+                className="rounded-xl border-primary/20 text-primary hover:bg-primary/5 px-8"
+              >
+                Load More Records
+              </Button>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-24 text-center rounded-3xl bg-muted/20 border-2 border-dashed border-border/50">
           <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mb-6">

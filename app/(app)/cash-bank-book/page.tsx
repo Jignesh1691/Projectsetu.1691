@@ -6,10 +6,11 @@ import { useAppState } from '@/hooks/use-store';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatCurrency, cn } from '@/lib/utils';
-import type { PaymentMode } from '@/lib/definitions';
+import type { PaymentMode, Transaction } from '@/lib/definitions';
 import { Download, FileText, File, Filter } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { getEffectiveTransaction } from '@/lib/financial-utils';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -33,7 +34,13 @@ export default function CashBankBookPage() {
         // 1. Regular Transactions
         const filteredTx = transactions
             .filter(t => t.payment_mode === mode)
+            .filter(t => {
+                const ledger = ledgers.find(l => l.id === t.ledger_id);
+                return !ledger?.name.toLowerCase().endsWith(' petty cash');
+            })
             .filter(t => selectedUser === ALL_USERS ? true : t.created_by === selectedUser)
+            .map(t => getEffectiveTransaction(t))
+            .filter((t): t is Transaction => t !== null)
             .map(t => ({
                 id: t.id,
                 date: t.date,

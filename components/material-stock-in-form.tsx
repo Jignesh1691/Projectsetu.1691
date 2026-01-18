@@ -42,9 +42,11 @@ type FormValues = {
 };
 
 const formSchema: z.ZodType<FormValues> = z.object({
-  quantity: z.coerce.number().positive('Quantity must be greater than 0.'),
+  quantity: z.coerce.number().positive('Quantity must be greater than 0.').max(1000000, 'Quantity is too large.'),
   description: z.string().optional(),
-  date: z.date(),
+  date: z.date().refine((d) => d <= new Date(Date.now() + 86400000), {
+    message: "Date cannot be more than 1 day in the future",
+  }),
   project_id: z.string().min(1, 'Please select a project.'),
   material_id: z.string().min(1, 'Please select a material.'),
   challan_url: z.string().optional(),
@@ -270,7 +272,7 @@ export function MaterialStockInForm({ setOpen, entry }: MaterialStockInFormProps
               )}
             />
 
-            {isNonAdmin && (
+            {isNonAdmin && entry && (
               <FormField
                 control={form.control}
                 name="request_message"

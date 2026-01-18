@@ -14,9 +14,13 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        const { searchParams } = new URL(req.url);
+        const summarize = searchParams.get('summarize') === 'true';
+        const orgId = session.user.organizationId as string;
+
         const ledgers = await prisma.ledger.findMany({
             where: {
-                organizationId: session.user.organizationId as string,
+                organizationId: orgId,
             },
             orderBy: {
                 createdAt: 'desc',
@@ -27,6 +31,52 @@ export async function GET(req: Request) {
                 }
             }
         });
+
+        if (summarize) {
+            // Get aggregations for all transactions in this org grouped by ledger
+            const stats = await prisma.transaction.groupBy({
+                by: ['ledgerId'],
+                where: {
+                    organizationId: orgId,
+                    approvalStatus: 'approved' // Only count approved transactions for balance
+                },
+                _sum: {
+                    amount: true
+                },
+                _count: true
+            });
+
+            // Get breakdown by type (income/expense)
+            const typeStats = await prisma.transaction.groupBy({
+                by: ['ledgerId', 'type'],
+                where: {
+                    organizationId: orgId,
+                    approvalStatus: 'approved'
+                },
+                _sum: {
+                    amount: true
+                }
+            });
+
+            // Merge stats into ledgers
+            const ledgersWithStats = ledgers.map(ledger => {
+                const ledgerStats = typeStats.filter(s => s.ledgerId === ledger.id);
+                const income = ledgerStats.find(s => s.type === 'income')?._sum.amount || 0;
+                const expense = ledgerStats.find(s => s.type === 'expense')?._sum.amount || 0;
+
+                return {
+                    ...ledger,
+                    _stats: {
+                        income,
+                        expense,
+                        net: income - expense,
+                        transactionCount: stats.find(s => s.ledgerId === ledger.id)?._count || 0
+                    }
+                };
+            });
+
+            return NextResponse.json(ledgersWithStats);
+        }
 
         return NextResponse.json(ledgers);
     } catch (error: unknown) {

@@ -4,7 +4,7 @@
 import React, { useState, useMemo } from 'react';
 import { AppLogo } from '@/components/icons';
 import { Button } from '@/components/ui/button';
-import { Bell, ArrowRightLeft, ReceiptText, FolderKanban, BookOpen, ClipboardList, FileText, Camera, LayoutDashboard, UserCog, Users, BookText, Settings, BellRing, Layers, LogOut, Scale, ScrollText, ShieldAlert, ChevronLeft } from 'lucide-react';
+import { Bell, ArrowRightLeft, ReceiptText, FolderKanban, BookOpen, ClipboardList, FileText, Camera, LayoutDashboard, UserCog, Users, BookText, Settings, BellRing, Layers, LogOut, Scale, ScrollText, ShieldAlert, ChevronLeft, Coins, Loader2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,7 +56,7 @@ interface NavGroup {
   hide?: boolean;
 }
 
-const getNavGroups = (role?: string): NavGroup[] => {
+const getNavGroups = (role?: string, canSeeFinances: boolean = true, canSeeOperations: boolean = true): NavGroup[] => {
   const isAdmin = role?.toLowerCase() === 'admin';
   return [
     {
@@ -64,21 +64,22 @@ const getNavGroups = (role?: string): NavGroup[] => {
       items: [
         { href: isAdmin ? '/admin' : '/app', label: 'Dashboard', icon: LayoutDashboard },
         { href: '/projects', label: 'Projects', icon: FolderKanban },
-        { href: '/ledgers', label: 'Ledgers', icon: BookOpen },
-        { href: '/transactions', label: 'Transactions', icon: ArrowRightLeft },
-        { href: '/records', label: 'Outstandings', icon: ReceiptText },
-        { href: '/cash-bank-book', label: 'Cash/Bank Book', icon: BookText },
-        { href: '/journal', label: 'Journal', icon: ScrollText },
+        { href: '/ledgers', label: 'Ledgers', icon: BookOpen, hide: !canSeeFinances },
+        { href: '/transactions', label: 'Transactions', icon: ArrowRightLeft, hide: !canSeeFinances },
+        { href: '/records', label: 'Outstandings', icon: ReceiptText, hide: !canSeeFinances },
+        { href: '/cash-bank-book', label: 'Cash/Bank Book', icon: BookText, hide: !canSeeFinances },
+        { href: '/journal', label: 'Journal', icon: ScrollText, hide: !canSeeFinances },
       ]
     },
     {
       title: 'Operations',
       items: [
-        { href: '/materials', label: 'Materials', icon: Layers },
-        { href: '/tasks', label: 'Tasks', icon: ClipboardList },
-        { href: '/hajari', label: 'Hajari', icon: Users },
-        { href: '/documents', label: 'Documents', icon: FileText },
-        { href: '/gallery', label: 'Site Photos', icon: Camera },
+        { href: '/materials', label: 'Materials', icon: Layers, hide: !canSeeOperations },
+        { href: '/tasks', label: 'Tasks', icon: ClipboardList, hide: !canSeeOperations },
+        { href: '/hajari', label: 'Hajari', icon: Users, hide: !canSeeOperations },
+        { href: '/petty-cash', label: 'Petty Cash', icon: Coins, hide: isAdmin },
+        { href: '/documents', label: 'Documents', icon: FileText, hide: !canSeeOperations },
+        { href: '/gallery', label: 'Site Photos', icon: Camera, hide: !canSeeOperations },
       ]
     },
     {
@@ -107,11 +108,26 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
     setMaterialOpen, setStockInOpen, setStockOutOpen
   } = useGlobalForms();
 
-  const { notifications, appUser, transactions, recordables, tasks, photos, documents, hajari_records, materials, material_ledger, isLoaded } = useAppState();
+  const { notifications, appUser, transactions, recordables, tasks, photos, documents, hajari_records, materials, material_ledger, isLoaded, project_users } = useAppState();
   const pathname = usePathname();
   const isAdmin = appUser?.role?.toLowerCase() === 'admin';
   const { isMobile, setIsOpen } = useSidebar();
   const router = useRouter();
+
+  const canSeeFinances = useMemo(() => {
+    if (isAdmin) return true;
+    return appUser?.canViewFinances !== false;
+  }, [isAdmin, appUser]);
+
+  const canCreateAnyEntry = useMemo(() => {
+    if (isAdmin) return true;
+    return appUser?.canCreateEntries !== false;
+  }, [isAdmin, appUser]);
+
+  const canSeeOperations = useMemo(() => {
+    if (isAdmin) return true;
+    return appUser?.canViewOperations !== false;
+  }, [isAdmin, appUser]);
 
 
   const canAddProjectOrLedger = appUser?.role === 'admin';
@@ -142,8 +158,8 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
 
   const mobileNavItems: NavItem[] = [
     { href: appUser?.role === 'admin' ? '/admin' : '/app', label: 'Home', icon: LayoutDashboard },
-    { href: '/transactions', label: 'History', icon: ArrowRightLeft },
-    { label: 'Add', icon: PlusCircle, id: 'add' }, // Restored id
+    { href: '/transactions', label: 'History', icon: ArrowRightLeft, hide: !canSeeFinances },
+    { label: 'Add', icon: PlusCircle, id: 'add' },
     { href: isAdmin ? '/admin' : '/app', label: 'Projects', icon: FolderKanban },
     { href: '/settings', label: 'Menu', icon: Settings },
   ];
@@ -152,6 +168,18 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
     await signOut({ callbackUrl: '/login' });
   }
 
+
+  // Block rendering until critical data (Phase 1) is loaded to prevent sidebar pop-in
+  if (!isLoaded) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading application...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -166,7 +194,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
         </SidebarHeader>
         <SidebarBody>
           <SidebarMenu>
-            {getNavGroups(appUser?.role).map((group: NavGroup, index: number) => {
+            {getNavGroups(appUser?.role, canSeeFinances, canSeeOperations).map((group: NavGroup, index: number) => {
               const isVisible = !group.adminOnly || isAdmin;
               if (!isVisible) return null;
 
@@ -327,16 +355,27 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" side="top" className="w-60 mb-2 bg-card">
               <DropdownMenuGroup>
-                <DropdownMenuLabel>Financial</DropdownMenuLabel>
-                <DropdownMenuItem onSelect={() => setQuickEntryOpen(true)}>
-                  <PlusCircle className="mr-2 h-4 w-4" /> Multi-Entry Form
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setTransactionOpen(true)}>
-                  <ArrowRightLeft className="mr-2 h-4 w-4" /> New Transaction
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setRecordOpen(true)}>
-                  <ReceiptText className="mr-2 h-4 w-4" /> New Outstanding
-                </DropdownMenuItem>
+                <div className="mb-2">
+                  <DropdownMenuLabel>Financial</DropdownMenuLabel>
+                  {canCreateAnyEntry && (
+                    <>
+                      <DropdownMenuItem onSelect={() => setQuickEntryOpen(true)}>
+                        <PlusCircle className="mr-2 h-4 w-4" /> Multi-Entry Form
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setTransactionOpen(true)}>
+                        <ArrowRightLeft className="mr-2 h-4 w-4" /> New Transaction
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setRecordOpen(true)}>
+                        <ReceiptText className="mr-2 h-4 w-4" /> New Outstanding
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {!canCreateAnyEntry && (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground italic">
+                      No permission to create entries
+                    </div>
+                  )}
+                </div>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
@@ -500,6 +539,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
+      {/* Trigger Rebuild */}
       <GlobalFormsProvider>
         <MaterialFormsProvider>
           <AppLayoutContent>{children}</AppLayoutContent>

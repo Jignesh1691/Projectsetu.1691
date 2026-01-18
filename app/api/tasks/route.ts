@@ -33,12 +33,19 @@ export async function GET(req: Request) {
             };
         }
 
+        const { searchParams } = new URL(req.url);
+        const limit = parseInt(searchParams.get('limit') || '100');
+        const page = parseInt(searchParams.get('page') || '1');
+        const skip = (page - 1) * limit;
+
         const tasks = await prisma.task.findMany({
             where: {
                 organizationId: session.user.organizationId as string,
                 ...projectFilter
             },
             orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip: skip,
         });
 
         return NextResponse.json(tasks);

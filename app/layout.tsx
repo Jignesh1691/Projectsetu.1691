@@ -46,7 +46,7 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/icon.svg" type="image/svg+xml" sizes="any" />
       </head>
-      <body className="font-body antialiased">
+      <body className="font-sans antialiased tabular-nums">
         <div className="pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
           <SessionProvider>
             <ThemeProvider

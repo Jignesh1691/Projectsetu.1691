@@ -5,6 +5,7 @@ import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { PlusCircle, MoreVertical, Pencil, Trash2, BookOpen, Download, FileText, File, View } from 'lucide-react';
 import { useAppState } from '@/hooks/use-store';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog,
   DialogContent,
@@ -54,6 +55,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { Recordable, Transaction, JournalEntry } from '@/lib/definitions';
+import { getEffectiveTransaction, getEffectiveRecordable } from '@/lib/financial-utils';
 
 
 const PREDEFINED_LEDGERS = ["Salary/Hajari"];
@@ -100,14 +102,72 @@ export default function LedgersPage() {
   };
 
   const filteredLedgers = useMemo(() => {
-    if (!isLoaded) return [];
-    return ledgers.filter(ledger =>
-      ledger.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [ledgers, searchTerm, isLoaded]);
+    if (!isLoaded || !appUser) return [];
 
-  const calculateLedgerFinancials = (ledgerId: string, projectId: string = 'all') => {
-    let ledgerTransactions = transactions.filter((t) => t.ledger_id === ledgerId);
+    return ledgers.filter(ledger => {
+      const matchesSearch = ledger.name.toLowerCase().includes(searchTerm.toLowerCase());
+      if (!matchesSearch) return false;
+
+      const isPettyCash = ledger.name.toLowerCase().endsWith(' petty cash');
+      const isOwnPettyCash = ledger.name === `${appUser.name} Petty Cash`;
+
+      // 1. If it's a petty cash ledger
+      if (isPettyCash) {
+        // Admins see ALL petty cash ledgers
+        if (appUser.role === 'admin') return true;
+        // Non-admins only see their OWN petty cash ledger
+        return isOwnPettyCash;
+      }
+
+      // 2. For regular ledgers, just return true since it matches search
+      return true;
+    });
+  }, [ledgers, searchTerm, isLoaded, appUser]);
+
+  const summary = useMemo(() => {
+    if (!isLoaded) return { totalIncome: 0, totalExpense: 0, netBalance: 0, totalReceivable: 0, totalPayable: 0, netOutstanding: 0 };
+
+    const effectiveTx = transactions
+      .map(t => getEffectiveTransaction(t))
+      .filter((t): t is Transaction => t !== null && (selectedProjectId === 'all' || t.project_id === selectedProjectId));
+
+    const effectiveRecords = recordables
+      .map(r => getEffectiveRecordable(r))
+      .filter((r): r is Recordable => r !== null && (selectedProjectId === 'all' || r.project_id === selectedProjectId));
+
+    const totalIncome = effectiveTx.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+    const totalExpense = effectiveTx.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+
+    const totalReceivable = effectiveRecords.filter(r => r.type === 'asset' && r.status === 'pending').reduce((sum, r) => sum + r.amount, 0);
+    const totalPayable = effectiveRecords.filter(r => r.type === 'liability' && r.status === 'pending').reduce((sum, r) => sum + r.amount, 0);
+
+    return {
+      totalIncome,
+      totalExpense,
+      netBalance: totalIncome - totalExpense,
+      totalReceivable,
+      totalPayable,
+      netOutstanding: totalReceivable - totalPayable
+    };
+  }, [transactions, recordables, selectedProjectId, isLoaded]);
+
+  const calculateLedgerFinancials = (ledger: Ledger, projectId: string = 'all') => {
+    // If we have server-side stats and no project filter, use them (Phase 1/2 speedup)
+    if (projectId === 'all' && (ledger as any)._stats) {
+      const stats = (ledger as any)._stats;
+      return {
+        income: stats.income,
+        expenses: stats.expense,
+        net: stats.net,
+        transactionCount: stats.transactionCount
+      };
+    }
+
+    // Fallback/Project-specific: Client-side calculation
+    let ledgerTransactions = transactions
+      .filter((t) => t.ledger_id === ledger.id)
+      .map(t => getEffectiveTransaction(t))
+      .filter((t): t is Transaction => t !== null);
 
     if (projectId !== 'all') {
       ledgerTransactions = ledgerTransactions.filter(t => t.project_id === projectId);
@@ -116,17 +176,12 @@ export default function LedgersPage() {
     const incomeTx = ledgerTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
     const expensesTx = ledgerTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
 
-    // Journal entries are not project-specific in the current schema, so we only include them if filtering is NOT active
-    // OR if we decide that journal entries are global and should always be shown (but usually filtering means specific context)
-    // Here we will hide them if a specific project is selected to avoid confusion, or we could include them.
-    // Given the request is "project report in ledger", mixing global journal entries might be misleading.
-    // So we excludes journal entries when a project is selected.
     let ledgerJournalDebits: JournalEntry[] = [];
     let ledgerJournalCredits: JournalEntry[] = [];
 
     if (projectId === 'all') {
-      ledgerJournalDebits = journal_entries ? journal_entries.filter(j => j.debit_ledger_id === ledgerId) : [];
-      ledgerJournalCredits = journal_entries ? journal_entries.filter(j => j.credit_ledger_id === ledgerId) : [];
+      ledgerJournalDebits = journal_entries ? journal_entries.filter(j => j.debit_ledger_id === ledger.id) : [];
+      ledgerJournalCredits = journal_entries ? journal_entries.filter(j => j.credit_ledger_id === ledger.id) : [];
     }
 
     const journalDebits = ledgerJournalDebits.reduce((sum, j) => sum + j.amount, 0);
@@ -150,7 +205,7 @@ export default function LedgersPage() {
 
     // Calculate Aggregate Totals
     const aggs = filteredLedgers.reduce((acc, l) => {
-      const { income, expenses } = calculateLedgerFinancials(l.id, selectedProjectId);
+      const { income, expenses } = calculateLedgerFinancials(l, selectedProjectId);
       acc.income += income;
       acc.expenses += expenses;
       return acc;
@@ -226,7 +281,7 @@ export default function LedgersPage() {
       startY: tableStartY,
       head: [['Ledger Name', 'Txns', 'Income', 'Expenses', 'Net']],
       body: filteredLedgers.map(l => {
-        const { income, expenses, net, transactionCount } = calculateLedgerFinancials(l.id, selectedProjectId);
+        const { income, expenses, net, transactionCount } = calculateLedgerFinancials(l, selectedProjectId);
         return [l.name, transactionCount, `Rs. ${formatCurrency(income, true)}`, `Rs. ${formatCurrency(expenses, true)}`, `Rs. ${formatCurrency(net, true)}`];
       }),
       theme: 'grid',
@@ -259,7 +314,7 @@ export default function LedgersPage() {
     }
     const worksheet = XLSX.utils.json_to_sheet(
       filteredLedgers.map(l => {
-        const { income, expenses, net, transactionCount } = calculateLedgerFinancials(l.id, selectedProjectId);
+        const { income, expenses, net, transactionCount } = calculateLedgerFinancials(l, selectedProjectId);
         return {
           'Ledger Name': l.name,
           'Transactions': transactionCount,
@@ -306,7 +361,7 @@ export default function LedgersPage() {
       doc.text(`${projectText} | Generated: ${new Date().toLocaleDateString()}`, 14, 26);
 
       // Financials for this specific filtered view
-      const { income, expenses, net } = calculateLedgerFinancials(ledger.id, selectedProjectId);
+      const { income, expenses, net } = calculateLedgerFinancials(ledger, selectedProjectId);
 
       // Calculate outstandings
       const ledgerReceivable = ledgerOutstandings.filter(r => r.type === 'asset' && r.status === 'pending').reduce((sum, r) => sum + r.amount, 0);
@@ -550,17 +605,87 @@ export default function LedgersPage() {
         />
       </div>
 
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <div className="rounded-xl border border-border/50 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 shadow-sm border-l-4 border-l-emerald-500 flex flex-col justify-center">
+          <p className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 upper-case tracking-tighter mb-0.5">Total Income</p>
+          <div className="text-sm font-bold text-emerald-900 dark:text-emerald-300 truncate leading-none">₹{formatCurrency(summary.totalIncome, true)}</div>
+        </div>
+        <div className="rounded-xl border border-border/50 bg-rose-50/50 dark:bg-rose-950/20 p-3 shadow-sm border-l-4 border-l-rose-500 flex flex-col justify-center">
+          <p className="text-[9px] font-bold text-rose-700 dark:text-rose-400 upper-case tracking-tighter mb-0.5">Total Expense</p>
+          <div className="text-sm font-bold text-rose-900 dark:text-rose-300 truncate leading-none">₹{formatCurrency(summary.totalExpense, true)}</div>
+        </div>
+        <div className={cn("rounded-xl border border-border/50 p-3 shadow-sm border-l-4 flex flex-col justify-center", summary.netBalance >= 0 ? "bg-blue-50/50 dark:bg-blue-950/20 border-l-blue-500" : "bg-orange-50/50 dark:bg-orange-950/20 border-l-orange-500")}>
+          <p className={cn("text-[9px] font-bold uppercase tracking-tighter mb-0.5", summary.netBalance >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400")}>Net Balance</p>
+          <div className={cn("text-sm font-bold truncate leading-none", summary.netBalance >= 0 ? "text-blue-900 dark:text-blue-300" : "text-orange-900 dark:text-orange-300")}>₹{formatCurrency(summary.netBalance, true)}</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <div className="rounded-xl border border-border/50 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 shadow-sm border-l-4 border-l-emerald-500 flex flex-col justify-center">
+          <p className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 upper-case tracking-tighter mb-0.5">Receivable</p>
+          <div className="text-sm font-bold text-emerald-900 dark:text-emerald-300 truncate leading-none">₹{formatCurrency(summary.totalReceivable, true)}</div>
+        </div>
+        <div className="rounded-xl border border-border/50 bg-rose-50/50 dark:bg-rose-950/20 p-3 shadow-sm border-l-4 border-l-rose-500 flex flex-col justify-center">
+          <p className="text-[9px] font-bold text-rose-700 dark:text-rose-400 upper-case tracking-tighter mb-0.5">Payable</p>
+          <div className="text-sm font-bold text-rose-900 dark:text-rose-300 truncate leading-none">₹{formatCurrency(summary.totalPayable, true)}</div>
+        </div>
+        <div className={cn("rounded-xl border border-border/50 p-3 shadow-sm border-l-4 flex flex-col justify-center", summary.netOutstanding >= 0 ? "bg-blue-50/50 dark:bg-blue-950/20 border-l-blue-500" : "bg-orange-50/50 dark:bg-orange-950/20 border-l-orange-500")}>
+          <p className={cn("text-[9px] font-bold uppercase tracking-tighter mb-0.5", summary.netOutstanding >= 0 ? "text-blue-700 dark:text-blue-400" : "text-orange-700 dark:text-orange-400")}>Net Outstanding</p>
+          <div className={cn("text-sm font-bold truncate leading-none", summary.netOutstanding >= 0 ? "text-blue-900 dark:text-blue-300" : "text-orange-900 dark:text-orange-300")}>₹{formatCurrency(summary.netOutstanding, true)}</div>
+        </div>
+      </div>
+
       {!isLoaded ? (
-        <div className="flex flex-col items-center justify-center py-24 space-y-4">
-          <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-          <p className="text-muted-foreground font-medium">Loading ledgers...</p>
+        <div className="space-y-4">
+          <div className="md:hidden space-y-3">
+            {[1, 2, 3, 4, 5].map(i => (
+              <Card key={i} className="border-border/50 rounded-xl overflow-hidden">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex justify-between">
+                    <Skeleton className="h-5 w-1/3" />
+                    <Skeleton className="h-5 w-1/4" />
+                  </div>
+                  <div className="flex gap-4">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-20" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <div className="hidden md:block">
+            <Card className="border-border/50 rounded-2xl overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead><Skeleton className="h-4 w-24" /></TableHead>
+                    <TableHead className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableHead>
+                    <TableHead className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableHead>
+                    <TableHead className="text-right"><Skeleton className="h-4 w-20 ml-auto" /></TableHead>
+                    <TableHead className="text-right w-[100px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-5 w-40" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-20 ml-auto" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-20 ml-auto" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-24 ml-auto" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-8 ml-auto rounded-full" /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+          </div>
         </div>
       ) : filteredLedgers.length > 0 ? (
         <>
           {/* Mobile View */}
           <div className="md:hidden">
             {filteredLedgers.map(ledger => {
-              const { income, expenses, net } = calculateLedgerFinancials(ledger.id, selectedProjectId);
+              const { income, expenses, net } = calculateLedgerFinancials(ledger, selectedProjectId);
               const isPredefined = PREDEFINED_LEDGERS.includes(ledger.name);
               return (
                 <Card key={ledger.id} className="border-x-0 border-t-0 rounded-none first:border-t bg-card">
@@ -638,7 +763,7 @@ export default function LedgersPage() {
                   </TableHeader>
                   <TableBody>
                     {filteredLedgers.map(ledger => {
-                      const { income, expenses, net } = calculateLedgerFinancials(ledger.id, selectedProjectId);
+                      const { income, expenses, net } = calculateLedgerFinancials(ledger, selectedProjectId);
                       const isPredefined = PREDEFINED_LEDGERS.includes(ledger.name);
                       return (
                         <TableRow key={ledger.id} className="group hover:bg-muted/30 transition-colors">
@@ -736,10 +861,10 @@ export default function LedgersPage() {
           {viewingLedger && (
             <div className="space-y-4 pt-4 text-sm">
               <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                <div className='text-muted-foreground'>Transactions</div> <div className='text-right'><Badge variant='outline'>{calculateLedgerFinancials(viewingLedger.id, selectedProjectId).transactionCount}</Badge></div>
-                <div className='text-muted-foreground'>Total Income</div> <div className='text-right font-semibold text-green-600 dark:text-green-400'>{formatCurrency(calculateLedgerFinancials(viewingLedger.id, selectedProjectId).income)}</div>
-                <div className='text-muted-foreground'>Total Expenses</div> <div className='text-right font-semibold text-red-600 dark:text-red-400'>{formatCurrency(calculateLedgerFinancials(viewingLedger.id, selectedProjectId).expenses)}</div>
-                <div className='text-muted-foreground font-bold'>Net Total</div> <div className={cn('text-right font-bold', calculateLedgerFinancials(viewingLedger.id, selectedProjectId).net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400')}>{formatCurrency(calculateLedgerFinancials(viewingLedger.id, selectedProjectId).net)}</div>
+                <div className='text-muted-foreground'>Transactions</div> <div className='text-right'><Badge variant='outline'>{calculateLedgerFinancials(viewingLedger, selectedProjectId).transactionCount}</Badge></div>
+                <div className='text-muted-foreground'>Total Income</div> <div className='text-right font-semibold text-green-600 dark:text-green-400'>{formatCurrency(calculateLedgerFinancials(viewingLedger, selectedProjectId).income)}</div>
+                <div className='text-muted-foreground'>Total Expenses</div> <div className='text-right font-semibold text-red-600 dark:text-red-400'>{formatCurrency(calculateLedgerFinancials(viewingLedger, selectedProjectId).expenses)}</div>
+                <div className='text-muted-foreground font-bold'>Net Total</div> <div className={cn('text-right font-bold', calculateLedgerFinancials(viewingLedger, selectedProjectId).net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400')}>{formatCurrency(calculateLedgerFinancials(viewingLedger, selectedProjectId).net)}</div>
               </div>
             </div>
           )}

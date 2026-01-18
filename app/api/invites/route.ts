@@ -31,6 +31,7 @@ export async function GET(req: Request) {
             return {
                 id: invite.id,
                 email: invite.email,
+                name: invite.name,
                 role: invite.role.toLowerCase(),
                 status: isExpired ? 'expired' : 'pending',
                 expiresAt: invite.expiresAt.toISOString(),
@@ -52,7 +53,7 @@ export async function POST(req: Request) {
     }
 
     try {
-        const { email, role } = await req.json();
+        const { email, role, name } = await req.json();
 
         if (!email || !role) {
             return NextResponse.json({ error: "Missing email or role" }, { status: 400 });
@@ -92,6 +93,7 @@ export async function POST(req: Request) {
         const invite = await prisma.invite.create({
             data: {
                 email,
+                name,
                 role: role.toUpperCase(),
                 token,
                 expiresAt,

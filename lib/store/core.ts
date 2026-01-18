@@ -20,87 +20,103 @@ import type {
     User,
     JournalEntry,
 } from '../definitions';
+import { defaultState } from '../default-state';
 
 export const initializeStore = async (setState: AppStateSetter) => {
-    setGlobalStateSetter(setState);
+    setGlobalStateSetter(setState, defaultState);
     try {
-        // --- Phase 1: Critical Metadata (Instant UI / Sidebar) ---
-        const [
-            projectsRes, ledgersRes, usersRes, laborsRes, materialsRes
-        ] = await Promise.all([
-            fetch('/api/projects'),
-            fetch('/api/ledgers'),
-            fetch('/api/users'),
-            fetch('/api/labors'),
-            fetch('/api/materials'),
-        ]);
+        // --- Phase 1: Immediate Parallel Fetching ---
+        // Start ALL essential fetches at once to utilize network capacity
+        const projectsPromise = fetch('/api/projects').then(res => res.ok ? res.json() : []);
+        const ledgersPromise = fetch('/api/ledgers?summarize=true').then(res => res.ok ? res.json() : []);
+        const usersPromise = fetch('/api/users').then(res => res.ok ? res.json() : []);
+        const laborsPromise = fetch('/api/labors').then(res => res.ok ? res.json() : []);
+        const materialsPromise = fetch('/api/materials').then(res => res.ok ? res.json() : []);
 
-        const [users, projects, ledgers, labors, materials] = await Promise.all([
-            usersRes.ok ? usersRes.json() : [],
-            projectsRes.ok ? projectsRes.json() : [],
-            ledgersRes.ok ? ledgersRes.json() : [],
-            laborsRes.ok ? laborsRes.json() : [],
-            materialsRes.ok ? materialsRes.json() : [],
-        ]);
+        // Start background data fetches immediately too
+        const transactionsPromise = fetch('/api/transactions?limit=100').then(res => res.ok ? res.json() : []);
+        const recordsPromise = fetch('/api/records?limit=100').then(res => res.ok ? res.json() : []);
+        const tasksPromise = fetch('/api/tasks?limit=100').then(res => res.ok ? res.json() : []);
+        const hajariPromise = fetch('/api/hajari?limit=100').then(res => res.ok ? res.json() : []);
+        const notificationsPromise = fetch('/api/notifications?limit=50').then(res => res.ok ? res.json() : []);
 
-        // Map users immediately for permission checks
-        const mappedUsers = Array.isArray(users) ? users.map((u: any) => ({
-            ...u.user,
-            name: u.user.name && u.user.name !== "Unknown" ? u.user.name : u.user.email.split('@')[0],
-            role: u.role,
-            organization_id: u.organizationId
-        })).filter(u => u.id) : [];
-
-        const mappedProjectUsers: ProjectUser[] = [];
-        if (Array.isArray(users)) {
-            users.forEach((u: any) => {
-                if (u.user && u.user.assignedProjects && Array.isArray(u.user.assignedProjects)) {
-                    u.user.assignedProjects.forEach((projectId: string) => {
-                        mappedProjectUsers.push({
-                            project_id: projectId,
-                            user_id: u.user.id,
-                            status: 'active'
+        // Wave A: Critical Metadata (Projects, Ledgers) - Unblocks Navigation
+        Promise.all([projectsPromise, ledgersPromise]).then(([projects, ledgers]) => {
+            const initialProjectUsers: ProjectUser[] = [];
+            if (Array.isArray(projects)) {
+                projects.forEach((p: any) => {
+                    if (p.projectUsers && Array.isArray(p.projectUsers)) {
+                        p.projectUsers.forEach((pu: any) => {
+                            initialProjectUsers.push({
+                                project_id: pu.projectId,
+                                user_id: pu.userId,
+                                status: 'active',
+                                can_view_finances: pu.canViewFinances,
+                                can_create_entries: pu.canCreateEntries,
+                            });
                         });
+                    }
+                });
+            }
+
+            updateState(prev => ({
+                ...prev,
+                projects: Array.isArray(projects) ? projects : [],
+                ledgers: Array.isArray(ledgers) ? ledgers.map((l: any) => mapModelToStore('ledger', l)) : [],
+                project_users: initialProjectUsers,
+                isInitialized: true // Unblocks sidebar
+            }));
+        }).catch(err => console.error("Error loading Wave A:", err));
+
+        // Wave B: Metadata (Users, Labors, Materials) - Unblocks Forms
+        Promise.all([usersPromise, laborsPromise, materialsPromise]).then(([users, labors, materials]) => {
+            const mappedUsers = Array.isArray(users) ? users.map((u: any) => ({
+                ...u.user,
+                name: u.user.name && u.user.name !== "Unknown" ? u.user.name : u.user.email.split('@')[0],
+                role: u.role,
+                organization_id: u.organizationId
+            })).filter(u => u.id) : [];
+
+            updateState(prev => {
+                const finalProjectUsers = [...prev.project_users];
+                if (Array.isArray(users)) {
+                    users.forEach((u: any) => {
+                        if (u.user && u.user.assignedProjects && Array.isArray(u.user.assignedProjects)) {
+                            u.user.assignedProjects.forEach((ap: any) => {
+                                const projectId = typeof ap === 'string' ? ap : ap.projectId;
+                                if (!finalProjectUsers.some(mpu => mpu.user_id === u.user.id && mpu.project_id === projectId)) {
+                                    finalProjectUsers.push({
+                                        project_id: projectId,
+                                        user_id: u.user.id,
+                                        status: 'active',
+                                        can_view_finances: typeof ap === 'object' ? ap.canViewFinances : false,
+                                        can_create_entries: typeof ap === 'object' ? ap.canCreateEntries : false,
+                                    });
+                                }
+                            });
+                        }
                     });
                 }
+                return {
+                    ...prev,
+                    users: mappedUsers,
+                    project_users: finalProjectUsers,
+                    labors: Array.isArray(labors) ? labors : [],
+                    materials: Array.isArray(materials) ? materials.map((m: any) => mapModelToStore('material', m)) : [],
+                };
             });
-        }
+        }).catch(err => console.error("Error loading Wave B:", err));
 
-        // Commit Phase 1 - App is now "Initialized" for user interaction
-        updateState((prev: any) => ({
-            ...prev,
-            users: mappedUsers,
-            project_users: mappedProjectUsers,
-            projects: Array.isArray(projects) ? projects : [],
-            ledgers: Array.isArray(ledgers) ? ledgers.map((l: any) => mapModelToStore('ledger', l)) : [],
-            labors: Array.isArray(labors) ? labors : [],
-            materials: Array.isArray(materials) ? materials.map((m: any) => mapModelToStore('material', m)) : [],
-            isInitialized: true // UNBLOCK UI HERE
-        }));
-
-        // --- Phase 2: Core Data (Dashboards / Lists) ---
-        // Fetch in background - UI is already interactive
-        Promise.all([
-            fetch('/api/transactions'),
-            fetch('/api/records'),
-            fetch('/api/tasks'),
-            fetch('/api/hajari'),
-            fetch('/api/notifications'),
-        ]).then(async ([transactionsRes, recordsRes, tasksRes, hajariRes, notificationsRes]) => {
-            const [transactions, records, tasks, hajari, notifications] = await Promise.all([
-                transactionsRes.ok ? transactionsRes.json() : [],
-                recordsRes.ok ? recordsRes.json() : [],
-                tasksRes.ok ? tasksRes.json() : [],
-                hajariRes.ok ? hajariRes.json() : [],
-                notificationsRes.ok ? notificationsRes.json() : [],
-            ]);
-
-            updateState((prev: any) => ({
+        // Wave C: Core Content (Transactions, Records, Tasks, Hajari) - Unblocks Dashboard
+        Promise.all([transactionsPromise, recordsPromise, tasksPromise, hajariPromise, notificationsPromise]).then(([transactions, records, tasks, hajari, notifications]) => {
+            updateState(prev => ({
                 ...prev,
                 transactions: Array.isArray(transactions) ? transactions.map((t: any) => mapModelToStore('transaction', t)) : [],
                 recordables: Array.isArray(records) ? records.map((r: any) => mapModelToStore('recordable', r)) : [],
                 tasks: Array.isArray(tasks) ? tasks.map((tk: any) => mapModelToStore('task', tk)) : [],
                 hajari_records: Array.isArray(hajari) ? hajari.map((h: any) => mapModelToStore('hajari', h)) : [],
+                records_loaded: true,
+                transactions_loaded: true,
                 notifications: Array.isArray(notifications) ? notifications.map((n: any) => ({
                     ...n,
                     user_id: n.userId,
@@ -110,31 +126,26 @@ export const initializeStore = async (setState: AppStateSetter) => {
                     created_at: n.createdAt,
                 })) : [],
             }));
+        }).catch(err => console.error("Error loading Wave C:", err));
 
-            // --- Phase 3: Heavy / Archive Data (Secondary Views) ---
-            Promise.all([
-                fetch('/api/photos'),
-                fetch('/api/documents'),
-                fetch('/api/material-ledger'),
-                fetch('/api/journal'),
-            ]).then(async ([photosRes, documentsRes, materialLedgerRes, journalRes]) => {
-                const [photos, documents, materialLedger, journal] = await Promise.all([
-                    photosRes.ok ? photosRes.json() : [],
-                    documentsRes.ok ? documentsRes.json() : [],
-                    materialLedgerRes.ok ? materialLedgerRes.json() : [],
-                    journalRes.ok ? journalRes.json() : [],
-                ]);
+        // Wave D: Heavy Assets (Photos, Documents, Journal)
+        // Fetched with a slight delay to prioritize interaction critical data
+        setTimeout(() => {
+            const photosPromise = fetch('/api/photos?limit=50').then(res => res.ok ? res.json() : []);
+            const documentsPromise = fetch('/api/documents?limit=50').then(res => res.ok ? res.json() : []);
+            const materialLedgerPromise = fetch('/api/material-ledger?limit=100').then(res => res.ok ? res.json() : []);
+            const journalPromise = fetch('/api/journal?limit=100').then(res => res.ok ? res.json() : []);
 
-                updateState((prev: any) => ({
+            Promise.all([photosPromise, documentsPromise, materialLedgerPromise, journalPromise]).then(([photos, documents, materialLedger, journal]) => {
+                updateState(prev => ({
                     ...prev,
                     photos: Array.isArray(photos) ? photos.map((p: any) => mapModelToStore('photo', p)) : [],
                     documents: Array.isArray(documents) ? documents.map((d: any) => mapModelToStore('document', d)) : [],
                     material_ledger: Array.isArray(materialLedger) ? materialLedger.map((ml: any) => mapModelToStore('materialledgerentry', ml)) : [],
                     journal_entries: Array.isArray(journal) ? journal.map((j: any) => mapModelToStore('journalentry', j)) : [],
                 }));
-            }).catch(e => console.error("Phase 3 Load Error:", e));
-
-        }).catch(e => console.error("Phase 2 Load Error:", e));
+            }).catch(err => console.error("Error loading Wave D:", err));
+        }, 800);
 
     } catch (error) {
         console.error("Failed to initialize store:", error);
@@ -157,6 +168,8 @@ export function mapModelToStore(itemType: string, item: any): any {
     if (item.organizationId) mapped.organization_id = item.organizationId;
     if (item.projectId) mapped.project_id = item.projectId;
     if (item.ledgerId) mapped.ledger_id = item.ledgerId;
+    if (item.canViewFinances !== undefined) mapped.can_view_finances = item.canViewFinances;
+    if (item.canCreateEntries !== undefined) mapped.can_create_entries = item.canCreateEntries;
 
     switch (itemType.toLowerCase()) {
         case 'transaction':

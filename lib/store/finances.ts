@@ -1,14 +1,14 @@
 'use client';
 
-import { updateState } from './state-manager';
+import { updateState, getCurrentState } from './state-manager';
 import { mapModelToStore, initializeStore } from './core';
 import { Transaction, Recordable, Ledger, User, PaymentMode } from '../definitions';
 
 export const SALARY_HAJARI_LEDGER = 'Salary/Hajari';
+export const PETTY_CASH_LEDGER = 'Petty Cash';
 
 export const ensureSalaryHajariLedger = async (currentUser: User) => {
-    let state: any;
-    updateState(s => { state = s; return s; });
+    const state = getCurrentState();
 
     if (!state || !state.ledgers) return null;
 
@@ -28,6 +28,55 @@ export const ensureSalaryHajariLedger = async (currentUser: User) => {
         }
     } catch (error) {
         console.error("Error ensuring Salary/Hajari ledger:", error);
+    }
+    return null;
+};
+
+export const ensurePettyCashLedger = async (currentUser: User) => {
+    let state = getCurrentState();
+
+    const ledgerName = `${currentUser.name} Petty Cash`;
+
+    // 1. Check local state first
+    if (state?.ledgers) {
+        let ledger = state.ledgers.find((l: any) => l.name === ledgerName);
+        if (ledger) return ledger.id;
+    }
+
+    // 2. If not found locally, fetch fresh list from API
+    try {
+        const response = await fetch('/api/ledgers');
+        if (response.ok) {
+            const allLedgers = await response.json();
+            // Update store
+            updateState((prev) => ({ ...prev, ledgers: allLedgers }));
+
+            // Check again within fresh list
+            const ledger = allLedgers.find((l: any) => l.name === ledgerName);
+            if (ledger) return ledger.id;
+        }
+    } catch (e) {
+        console.error("Failed to sync ledgers:", e);
+    }
+
+    // 3. If still not found, create it
+    try {
+        const response = await fetch('/api/ledgers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: ledgerName }),
+        });
+
+        if (response.ok) {
+            const newLedger = await response.json();
+            updateState(prev => ({ ...prev, ledgers: [newLedger, ...prev.ledgers] }));
+            return newLedger.id;
+        } else {
+            const errorData = await response.json();
+            console.error(`Failed to create ${ledgerName} ledger:`, errorData);
+        }
+    } catch (error) {
+        console.error(`Error ensuring ${ledgerName} ledger:`, error);
     }
     return null;
 };
@@ -443,5 +492,54 @@ export const addMultipleItems = async (items: QuickEntryItem[], currentUser: Use
     } catch (error) {
         console.error("Error adding multiple items:", error);
         throw error;
+    }
+};
+export const fetchMoreTransactions = async () => {
+    const state = getCurrentState();
+    if (!state || !state.has_more_transactions) return;
+
+    const nextPage = state.transaction_page + 1;
+    const limit = 50; // Use smaller pages for incremental loading
+
+    try {
+        const response = await fetch(`/api/transactions?page=${nextPage}&limit=${limit}`);
+        if (!response.ok) throw new Error("Failed to fetch more transactions");
+
+        const data = await response.json();
+        const mapped = data.map((t: any) => mapModelToStore('transaction', t));
+
+        updateState(prev => ({
+            ...prev,
+            transactions: [...prev.transactions, ...mapped],
+            transaction_page: nextPage,
+            has_more_transactions: mapped.length === limit
+        }));
+    } catch (error) {
+        console.error("Error fetching more transactions:", error);
+    }
+};
+
+export const fetchMoreRecords = async () => {
+    const state = getCurrentState();
+    if (!state || !state.has_more_records) return;
+
+    const nextPage = state.record_page + 1;
+    const limit = 50;
+
+    try {
+        const response = await fetch(`/api/records?page=${nextPage}&limit=${limit}`);
+        if (!response.ok) throw new Error("Failed to fetch more records");
+
+        const data = await response.json();
+        const mapped = data.map((r: any) => mapModelToStore('recordable', r));
+
+        updateState(prev => ({
+            ...prev,
+            recordables: [...prev.recordables, ...mapped],
+            record_page: nextPage,
+            has_more_records: mapped.length === limit
+        }));
+    } catch (error) {
+        console.error("Error fetching more records:", error);
     }
 };

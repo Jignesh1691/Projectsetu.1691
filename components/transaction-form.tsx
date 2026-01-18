@@ -50,9 +50,11 @@ import { ScrollArea } from './ui/scroll-area';
 
 const formSchema = z.object({
   type: z.enum(['income', 'expense']),
-  amount: z.coerce.number().min(0.01, 'Amount must be greater than 0.'),
+  amount: z.coerce.number().min(0.01, 'Amount must be greater than 0.').max(100000000, 'Amount seems too high. Please verify.'),
   description: z.string().min(2, 'Description must be at least 2 characters.'),
-  date: z.date(),
+  date: z.date().refine((d) => d <= new Date(Date.now() + 86400000), {
+    message: "Date cannot be more than 1 day in the future",
+  }),
   project_id: z.string().min(1, 'Please select a project.'),
   ledger_id: z.string().min(1, 'Please select a ledger.'),
   payment_mode: z.enum(['cash', 'bank']),
@@ -70,7 +72,7 @@ interface TransactionFormProps {
 const CREATE_NEW_VALUE = 'create-new';
 
 export function TransactionForm({ setOpen, transaction }: TransactionFormProps) {
-  const { ledgers, currentUser, userVisibleProjects, appUser } = useAppState();
+  const { ledgers, currentUser, userEntryAllowedProjects, appUser } = useAppState();
   const { toast } = useToast();
 
   const [isProjectDialogOpen, setProjectDialogOpen] = useState(false);
@@ -397,7 +399,7 @@ export function TransactionForm({ setOpen, transaction }: TransactionFormProps) 
                       <Combobox
                         options={
                           (appUser?.role === 'admin' ? [{ value: CREATE_NEW_VALUE, label: 'Create new project...' }] : []).concat(
-                            userVisibleProjects.map(p => ({ value: p.id, label: p.name }))
+                            userEntryAllowedProjects.map(p => ({ value: p.id, label: p.name }))
                           )
                         }
                         value={field.value}
@@ -492,7 +494,7 @@ export function TransactionForm({ setOpen, transaction }: TransactionFormProps) 
                 )}
               />
 
-              {isNonAdmin && (
+              {isNonAdmin && transaction && (
                 <FormField
                   control={form.control}
                   name="request_message"

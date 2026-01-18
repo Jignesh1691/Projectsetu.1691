@@ -22,6 +22,9 @@ export async function GET(req: Request) {
         // Parse query parameters
         const { searchParams } = new URL(req.url);
         const createdBy = searchParams.get('createdBy');
+        const limit = parseInt(searchParams.get('limit') || '100'); // Reduced from 1000 for performance
+        const page = parseInt(searchParams.get('page') || '1');
+        const skip = (page - 1) * limit;
 
         // If user is not admin, we may want to filter transactions by projects they are assigned to
         let projectFilter = {};
@@ -29,7 +32,8 @@ export async function GET(req: Request) {
             const assignedProjects = await prisma.projectUser.findMany({
                 where: {
                     userId,
-                    status: 'active'
+                    status: 'active',
+                    canViewFinances: true
                 },
                 select: { projectId: true }
             });
@@ -57,6 +61,8 @@ export async function GET(req: Request) {
             orderBy: {
                 date: 'desc',
             },
+            take: limit,
+            skip: skip,
         });
 
         return apiResponse.success(transactions);
@@ -86,16 +92,32 @@ export async function POST(req: Request) {
 
         // Project access check for non-admins
         if (userRole !== 'admin' && projectId) {
-            const projectUsers = await prisma.projectUser.findMany({
-                where: { userId: session.user.id }
+            const projectUser = await prisma.projectUser.findUnique({
+                where: {
+                    projectId_userId: {
+                        projectId,
+                        userId: session.user.id
+                    }
+                }
             });
-            if (!canAccessProject(projectId, session.user.id, userRole, projectUsers as any)) {
+
+            if (!projectUser || projectUser.status !== 'active') {
                 return apiResponse.forbidden("You don't have access to this project");
+            }
+
+            if (!projectUser.canCreateEntries) {
+                return apiResponse.forbidden("You don't have permission to create financial entries for this project");
             }
         }
 
+        // Fetch ledger to check if it's a petty cash ledger
+        const ledger = await prisma.ledger.findUnique({
+            where: { id: ledgerId }
+        });
+        const isPettyCash = ledger?.name.toLowerCase().endsWith(' petty cash');
+
         // Determine approval status
-        const approvalStatus = requiresApproval('transaction', 'create', userRole)
+        const approvalStatus = (requiresApproval('transaction', 'create', userRole) && !isPettyCash)
             ? 'pending-create'
             : 'approved';
 
@@ -156,6 +178,7 @@ export async function PUT(req: Request) {
 
         const transaction = await prisma.transaction.findUnique({
             where: { id },
+            include: { ledger: true }
         });
 
         if (!transaction || transaction.organizationId !== session.user.organizationId) {
@@ -171,8 +194,10 @@ export async function PUT(req: Request) {
 
         const { type, amount, description, date, projectId, ledgerId, paymentMode, requestMessage } = validation.data;
 
+        const isPettyCash = transaction.ledger?.name.toLowerCase().endsWith(' petty cash');
+
         // Check if approval is required
-        if (requiresApproval('transaction', 'edit', userRole)) {
+        if (requiresApproval('transaction', 'edit', userRole) && !isPettyCash) {
             // User: Create pending edit request
             const updated = await prisma.transaction.update({
                 where: { id },
@@ -254,6 +279,7 @@ export async function DELETE(req: Request) {
 
         const transaction = await prisma.transaction.findUnique({
             where: { id },
+            include: { ledger: true }
         });
 
         if (!transaction || transaction.organizationId !== session.user.organizationId) {
@@ -268,7 +294,9 @@ export async function DELETE(req: Request) {
             return apiResponse.error("Cannot delete an automated transaction. Please revert it instead.");
         }
 
-        if (requiresApproval('transaction', 'delete', userRole)) {
+        const isPettyCash = transaction.ledger?.name.toLowerCase().endsWith(' petty cash');
+
+        if (requiresApproval('transaction', 'delete', userRole) && !isPettyCash) {
             // User: Mark for pending deletion
             const updated = await prisma.transaction.update({
                 where: { id },

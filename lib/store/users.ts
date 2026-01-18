@@ -9,6 +9,9 @@ type UserFormData = {
     password?: string;
     assignedProjects: string[];
     isActive: boolean;
+    canViewFinances?: boolean;
+    canViewOperations?: boolean;
+    canCreateEntries?: boolean;
 };
 
 export const addUser = async (data: UserFormData) => {

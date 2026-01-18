@@ -1,0 +1,54 @@
+npm warn ERESOLVE overriding peer dependency
+npm warn While resolving: @auth/core@0.41.1
+npm warn Found: nodemailer@6.10.1
+npm warn node_modules/nodemailer
+npm warn   peerOptional nodemailer@"^6.8.0" from @auth/core@0.41.0
+npm warn   node_modules/next-auth/node_modules/@auth/core
+npm warn     @auth/core@"0.41.0" from next-auth@5.0.0-beta.30
+npm warn     node_modules/next-auth
+npm warn   1 more (the root project)
+npm warn
+npm warn Could not resolve dependency:
+npm warn peerOptional nodemailer@"^7.0.7" from @auth/core@0.41.1
+npm warn node_modules/@auth/core
+npm warn   @auth/core@"0.41.1" from @auth/prisma-adapter@2.11.1
+npm warn   node_modules/@auth/prisma-adapter
+npm warn
+npm warn Conflicting peer dependency: nodemailer@7.0.12
+npm warn node_modules/nodemailer
+npm warn   peerOptional nodemailer@"^7.0.7" from @auth/core@0.41.1
+npm warn   node_modules/@auth/core
+npm warn     @auth/core@"0.41.1" from @auth/prisma-adapter@2.11.1
+npm warn     node_modules/@auth/prisma-adapter
+npm error code ERESOLVE
+npm error ERESOLVE could not resolve
+npm error
+npm error While resolving: next-auth@5.0.0-beta.30
+npm error Found: nodemailer@6.10.1
+npm error node_modules/nodemailer
+npm error   peerOptional nodemailer@"^6.8.0" from @auth/core@0.41.0
+npm error   node_modules/next-auth/node_modules/@auth/core
+npm error     @auth/core@"0.41.0" from next-auth@5.0.0-beta.30
+npm error     node_modules/next-auth
+npm error       next-auth@"^5.0.0-beta.30" from the root project
+npm error   nodemailer@"^6.10.1" from the root project
+npm error
+npm error Could not resolve dependency:
+npm error peerOptional nodemailer@"^7.0.7" from next-auth@5.0.0-beta.30
+npm error node_modules/next-auth
+npm error   next-auth@"^5.0.0-beta.30" from the root project
+npm error
+npm error Conflicting peer dependency: nodemailer@7.0.12
+npm error node_modules/nodemailer
+npm error   peerOptional nodemailer@"^7.0.7" from next-auth@5.0.0-beta.30
+npm error   node_modules/next-auth
+npm error     next-auth@"^5.0.0-beta.30" from the root project
+npm error
+npm error Fix the upstream dependency conflict, or retry
+npm error this command with --force or --legacy-peer-deps
+npm error to accept an incorrect (and potentially broken) dependency resolution.
+npm error
+npm error
+npm error For a full report see:
+npm error C:\Users\91997\AppData\Local\npm-cache\_logs\2026-01-18T16_13_20_571Z-eresolve-report.txt
+npm error A complete log of this run can be found in: C:\Users\91997\AppData\Local\npm-cache\_logs\2026-01-18T16_13_20_571Z-debug-0.log

@@ -13,6 +13,7 @@ const envSchema = z.object({
     R2_ENDPOINT: z.string().url(),
     R2_BUCKET_NAME: z.string().min(1),
     NEXT_PUBLIC_R2_PUBLIC_URL: z.string().url(),
+    GOOGLE_GENAI_API_KEY: z.string().min(1),
 });
 
 export const validateEnv = () => {

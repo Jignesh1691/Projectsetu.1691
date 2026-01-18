@@ -55,6 +55,43 @@ async function main() {
     });
     console.log(`✅ Admin membership assigned`);
 
+    // Create Project
+    const project = await prisma.project.upsert({
+        where: { id: 'project-alpha' }, // Fixed ID for testing
+        update: {},
+        create: {
+            id: 'project-alpha',
+            name: 'Alpha Project',
+            // status field does not exist on Project model
+            organizationId: org.id,
+            location: 'Bangalore',
+        },
+    });
+    console.log(`✅ Project created: ${project.name}`);
+
+    // Assign Admin to Project
+    await prisma.projectUser.createMany({
+        data: [{
+            userId: admin.id,
+            projectId: project.id,
+            status: 'active',
+        }],
+        skipDuplicates: true,
+    });
+
+    // Create Ledger
+    const ledger = await prisma.ledger.upsert({
+        where: { id: 'ledger-general' }, // Fixed ID for testing
+        update: {},
+        create: {
+            id: 'ledger-general',
+            name: 'General Expenses',
+            // type field does not exist on Ledger model
+            organizationId: org.id,
+        },
+    });
+    console.log(`✅ Ledger created: ${ledger.name}`);
+
     console.log('🚀 Seeding completed successfully!');
 }
 

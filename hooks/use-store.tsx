@@ -3,6 +3,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useMemo, ReactNode } from 'react';
 import { useSession } from 'next-auth/react';
+import { Loader2 } from 'lucide-react';
 import type {
   Project,
   Ledger,
@@ -47,8 +48,12 @@ export interface AppState {
   appUser: User | null; // This will be the user profile from our DB
   currentUser: User | null; // Alias for appUser to support legacy components
   userVisibleProjects: Project[];
-  setState: React.Dispatch<React.SetStateAction<Omit<AppState, 'setState' | 'appUser' | 'currentUser' | 'userVisibleProjects' | 'isLoaded'>>>;
+  userFinanceVisibleProjects: Project[];
+  userEntryAllowedProjects: Project[];
+  setState: React.Dispatch<React.SetStateAction<Omit<AppState, 'setState' | 'appUser' | 'currentUser' | 'userVisibleProjects' | 'userFinanceVisibleProjects' | 'userEntryAllowedProjects' | 'isLoaded'>>>;
   isLoaded: boolean;
+  records_loaded: boolean;
+  transactions_loaded: boolean;
 }
 
 const AppStateContext = createContext<AppState | undefined>(undefined);
@@ -69,12 +74,10 @@ const getInitialState = () => {
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const { data: session, status } = useSession();
-  const [state, setState] = useState<Omit<AppState, 'setState' | 'appUser' | 'currentUser' | 'userVisibleProjects' | 'isLoaded'>>(defaultState as any);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [state, setState] = useState<Omit<AppState, 'setState' | 'appUser' | 'currentUser' | 'userVisibleProjects' | 'userFinanceVisibleProjects' | 'userEntryAllowedProjects' | 'isLoaded'>>(defaultState as any);
 
   useEffect(() => {
     initializeStore(setState as any);
-    setIsLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -107,10 +110,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const userVisibleProjects = useMemo(() => {
     if (!appUser || !state) return [];
     const userRole = (appUser.role as string || '').toLowerCase();
-    if (userRole === 'admin') {
-      return state.projects;
-    }
+    if (userRole === 'admin') return state.projects;
     const userProjectIds = state.project_users.filter((pu: any) => pu.user_id === appUser.id).map((pu: any) => pu.project_id);
+    return state.projects.filter(p => userProjectIds.includes(p.id));
+  }, [appUser, state]);
+
+  const userFinanceVisibleProjects = useMemo(() => {
+    if (!appUser || !state) return [];
+    if (appUser.role === 'admin') return state.projects;
+    const userProjectIds = state.project_users
+      .filter((pu: any) => pu.user_id === appUser.id && pu.can_view_finances)
+      .map((pu: any) => pu.project_id);
+    return state.projects.filter(p => userProjectIds.includes(p.id));
+  }, [appUser, state]);
+
+  const userEntryAllowedProjects = useMemo(() => {
+    if (!appUser || !state) return [];
+    if (appUser.role === 'admin') return state.projects;
+    const userProjectIds = state.project_users
+      .filter((pu: any) => pu.user_id === appUser.id && pu.can_create_entries)
+      .map((pu: any) => pu.project_id);
     return state.projects.filter(p => userProjectIds.includes(p.id));
   }, [appUser, state]);
 
@@ -119,18 +138,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="flex flex-col items-center gap-2">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-8 w-8 animate-spin text-primary"
-          >
-            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-          </svg>
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-muted-foreground">Loading application...</p>
         </div>
       </div>
@@ -142,8 +150,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     appUser,
     currentUser,
     userVisibleProjects,
+    userFinanceVisibleProjects,
+    userEntryAllowedProjects,
     setState,
-    isLoaded,
+    isLoaded: (state as any).isInitialized || false,
+    records_loaded: (state as any).records_loaded || false,
+    transactions_loaded: (state as any).transactions_loaded || false,
   };
 
   return (
