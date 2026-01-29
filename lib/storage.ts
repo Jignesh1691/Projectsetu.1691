@@ -1,9 +1,18 @@
 import { S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 
+const endpoint = process.env.R2_ENDPOINT || "";
+const bucketName = process.env.R2_BUCKET_NAME || "";
+
+// Sanitize endpoint: If it ends with the bucket name, remove it
+// This handles cases where user accidentally put ".../bucketName" as the endpoint
+const sanitizedEndpoint = (endpoint.endsWith(bucketName) && bucketName)
+    ? endpoint.slice(0, -bucketName.length).replace(/\/$/, "") // Remove bucket and trailing slash
+    : endpoint;
+
 const r2Client = new S3Client({
     region: "auto",
-    endpoint: process.env.R2_ENDPOINT || "",
+    endpoint: sanitizedEndpoint,
     credentials: {
         accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
         secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
@@ -42,7 +51,8 @@ export async function uploadFile(
     }
 
     // Fallback to endpoint-based URL if public URL is not provided
-    return `${process.env.R2_ENDPOINT}/${process.env.R2_BUCKET_NAME}/${fileName}`;
+    // Use sanitized endpoint to avoid validation issues or double paths
+    return `${sanitizedEndpoint}/${process.env.R2_BUCKET_NAME}/${fileName}`;
 }
 
 export async function deleteFile(fileName: string) {

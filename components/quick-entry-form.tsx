@@ -26,6 +26,7 @@ const itemSchema = z.object({
   description: z.string().min(2, 'Min 2 chars.'),
   ledger_id: z.string().min(1, 'Ledger is required.'),
   payment_mode: z.enum(['cash', 'bank']),
+  financial_account_id: z.string().optional(),
 });
 
 const formSchema = z.object({
@@ -58,6 +59,7 @@ export function QuickEntryForm({ setOpen }: QuickEntryFormProps) {
           description: '',
           ledger_id: '',
           payment_mode: 'bank',
+          financial_account_id: '',
         },
       ],
     },
@@ -106,6 +108,7 @@ export function QuickEntryForm({ setOpen }: QuickEntryFormProps) {
       description: '',
       ledger_id: '',
       payment_mode: 'bank',
+      financial_account_id: '',
     });
   }
 
@@ -260,10 +263,10 @@ export function QuickEntryForm({ setOpen }: QuickEntryFormProps) {
                     name={`items.${index}.payment_mode`}
                     render={({ field }) => (
                       <FormItem className="space-y-1">
-                        <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground/70">Payment Mode</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground/70">Mode</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
-                            <SelectTrigger className="h-9 md:h-10 rounded-xl text-xs"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-9 md:h-10 rounded-xl text-xs"><SelectValue placeholder="Mode" /></SelectTrigger>
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="bank">Bank</SelectItem>
@@ -275,6 +278,34 @@ export function QuickEntryForm({ setOpen }: QuickEntryFormProps) {
                     )}
                   />
                 </div>
+
+                <FormField
+                  name={`items.${index}.financial_account_id`}
+                  render={({ field }) => {
+                    const { financial_accounts } = useAppState();
+                    const paymentMode = form.watch(`items.${index}.payment_mode`);
+                    const accounts = financial_accounts.filter(a => a.type === (paymentMode === 'cash' ? 'CASH' : 'BANK'));
+
+                    return (
+                      <FormItem className="space-y-1">
+                        <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground/70">Account</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger className="h-9 md:h-10 rounded-xl text-xs"><SelectValue placeholder="Select Account" /></SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {accounts.map(account => (
+                              <SelectItem key={account.id} value={account.id}>
+                                {account.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
 
                 <FormField
                   name={`items.${index}.description`}
@@ -304,6 +335,6 @@ export function QuickEntryForm({ setOpen }: QuickEntryFormProps) {
           <Button type="submit" className="h-10 md:h-12 rounded-xl text-sm">Submit All Entries</Button>
         </div>
       </form>
-    </Form>
+    </Form >
   );
 }

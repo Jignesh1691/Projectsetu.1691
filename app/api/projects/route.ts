@@ -46,7 +46,7 @@ export async function POST(req: Request) {
             return apiResponse.error(validation.error.issues[0].message);
         }
 
-        const { name, location, assigned_users } = validation.data;
+        const { name, location, status } = validation.data;
 
         const organizationId = session.user.organizationId as string;
 
@@ -63,26 +63,13 @@ export async function POST(req: Request) {
             return apiResponse.error("A project with this name already exists");
         }
 
-        const project = await prisma.$transaction(async (tx) => {
-            const newProject = await tx.project.create({
-                data: {
-                    name,
-                    location,
-                    organizationId,
-                },
-            });
-
-            if (assigned_users && assigned_users.length > 0) {
-                await tx.projectUser.createMany({
-                    data: assigned_users.map((userId: string) => ({
-                        projectId: newProject.id,
-                        userId: userId,
-                        status: 'active'
-                    }))
-                });
-            }
-
-            return newProject;
+        const project = await prisma.project.create({
+            data: {
+                name,
+                location,
+                status: (status as any) || 'ACTIVE',
+                organizationId,
+            },
         });
 
         return apiResponse.success(project, 201);
@@ -111,7 +98,7 @@ export async function PUT(req: Request) {
             return apiResponse.error(validation.error.issues[0].message);
         }
 
-        const { name, location, assigned_users } = validation.data;
+        const { name, location, status } = validation.data;
 
         const project = await prisma.project.findUnique({
             where: { id },
@@ -127,27 +114,9 @@ export async function PUT(req: Request) {
             data: {
                 name,
                 location: location || undefined,
+                status: status as any,
             },
         });
-
-        // Update assigned users if provided
-        if (assigned_users) {
-            // First delete existing assignments for this project
-            await prisma.projectUser.deleteMany({
-                where: { projectId: id }
-            });
-
-            // Create new assignments
-            if (assigned_users.length > 0) {
-                await prisma.projectUser.createMany({
-                    data: assigned_users.map((userId: string) => ({
-                        projectId: id,
-                        userId: userId,
-                        status: 'active'
-                    }))
-                });
-            }
-        }
 
         return apiResponse.success(updatedProject);
     } catch (error: unknown) {

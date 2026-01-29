@@ -21,6 +21,7 @@ import type {
   MaterialLedgerEntry,
   User,
   JournalEntry,
+  FinancialAccount,
 } from '@/lib/definitions';
 import { defaultState } from '@/lib/default-state';
 import { initializeStore } from '@/lib/store';
@@ -44,6 +45,7 @@ export interface AppState {
   materials: Material[];
   material_ledger: MaterialLedgerEntry[];
   journal_entries: JournalEntry[];
+  financial_accounts: FinancialAccount[];
   appUser: User | null; // This will be the user profile from our DB
   currentUser: User | null; // Alias for appUser to support legacy components
   userVisibleProjects: Project[];
@@ -88,7 +90,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!session?.user) return null;
 
     // Check if user exists in our local store list
-    const matchedUser = state?.users?.find((u: any) => u.email.toLowerCase() === session.user?.email?.toLowerCase());
+    const matchedUser = state?.users?.find((u: any) => u.email?.toLowerCase() === session.user?.email?.toLowerCase());
 
     // Always prioritize the session's role and organizationId which come from the real DB
     return {

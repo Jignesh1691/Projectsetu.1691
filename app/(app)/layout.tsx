@@ -67,6 +67,7 @@ const getNavGroups = (role?: string): NavGroup[] => {
         { href: '/ledgers', label: 'Ledgers', icon: BookOpen },
         { href: '/transactions', label: 'Transactions', icon: ArrowRightLeft },
         { href: '/records', label: 'Outstandings', icon: ReceiptText },
+        { href: '/gst-register', label: 'GST Register', icon: FileText },
         { href: '/cash-bank-book', label: 'Cash/Bank Book', icon: BookText },
         { href: '/journal', label: 'Journal', icon: ScrollText },
       ]
@@ -156,7 +157,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Sidebar>
-        <SidebarHeader className="h-14 flex items-center px-4 border-b border-sidebar-border/50">
+        <SidebarHeader className="h-16 flex items-center px-4 border-b border-sidebar-border/50">
           <div className="flex items-center gap-3 px-2 py-2">
             <div className="w-8 h-8 text-primary shadow-sm">
               <AppLogo />

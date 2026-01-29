@@ -113,3 +113,30 @@ export function filterRecordables(
     return projectMatch && ledgerMatch && userMatch && dateMatch && paymentModeMatch && typeMatch && statusMatch;
   });
 }
+
+/**
+ * Gets the current Indian financial year string (April to March)
+ * e.g., "25-26" for April 2025 to March 2026
+ */
+export function getFinancialYear(date: Date = new Date()): string {
+  const currentMonth = date.getMonth(); // 0-indexed: 3 is April
+  const currentYear = date.getFullYear();
+
+  let startYear, endYear;
+
+  if (currentMonth >= 3) {
+    // April or later: current year is start year
+    startYear = currentYear;
+    endYear = currentYear + 1;
+  } else {
+    // Jan, Feb, Mar: previous year is start year
+    startYear = currentYear - 1;
+    endYear = currentYear;
+  }
+
+  // Use last two digits of years
+  const startStr = startYear.toString().slice(-2);
+  const endStr = endYear.toString().slice(-2);
+
+  return `${startStr}-${endStr}`;
+}

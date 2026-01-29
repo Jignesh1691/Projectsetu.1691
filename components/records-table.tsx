@@ -7,7 +7,8 @@ import type { Recordable } from '@/lib/definitions';
 import { Badge } from '@/components/ui/badge';
 import { cn, formatCurrency } from '@/lib/utils';
 import { Button } from './ui/button';
-import { Pencil, Trash2, CheckCircle, Lock, MoreVertical, View, MessageSquare } from 'lucide-react';
+import { Pencil, Trash2, CheckCircle, Lock, MoreVertical, View, MessageSquare, ReceiptText } from 'lucide-react';
+import { RecordSettlementDialog } from './record-settlement-dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,6 +41,7 @@ export function RecordsTable({ recordables, onEdit, onView }: RecordsTableProps)
   const { toast } = useToast();
   const [recordToConvert, setRecordToConvert] = useState<Recordable | null>(null);
   const [recordToDelete, setRecordToDelete] = useState<Recordable | null>(null);
+  const [recordToSettle, setRecordToSettle] = useState<Recordable | null>(null);
   const [requestMessage, setRequestMessage] = useState('');
 
   const getProjectName = (id: string) => projects.find((p) => p.id === id)?.name || 'N/A';
@@ -134,7 +136,7 @@ export function RecordsTable({ recordables, onEdit, onView }: RecordsTableProps)
                     )}
                   </div>
                   <div className="text-right flex items-center gap-2">
-                    <p className={cn('font-bold', record.type === 'asset' ? 'text-green-600' : 'text-red-600')}>{formatCurrency(record.amount)}</p>
+                    <p className={cn('font-bold', (record.type === 'income' || (record as any).type === 'income') ? 'text-green-600' : 'text-red-600')}>{formatCurrency(record.amount)}</p>
                     {onEdit && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -144,9 +146,9 @@ export function RecordsTable({ recordables, onEdit, onView }: RecordsTableProps)
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           {onView && <DropdownMenuItem onClick={() => onView(record)}><View className="mr-2 h-4 w-4" /> View Details</DropdownMenuItem>}
-                          {record.status === 'pending' && (
-                            <DropdownMenuItem onClick={() => handleConvertClick(record)} disabled={isPending}>
-                              <CheckCircle className="mr-2 h-4 w-4" /> Mark Paid
+                          {record.status !== 'paid' && (
+                            <DropdownMenuItem onClick={() => setRecordToSettle(record)} disabled={isPending}>
+                              <ReceiptText className="mr-2 h-4 w-4" /> Settle / Pay
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem onClick={() => onEdit(record)} disabled={isLocked || record.status === 'paid' || isPending}>
@@ -179,6 +181,8 @@ export function RecordsTable({ recordables, onEdit, onView }: RecordsTableProps)
               <TableHead>Type</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Amount</TableHead>
+              <TableHead className="text-right">Paid</TableHead>
+              <TableHead className="text-right">Balance</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -199,12 +203,14 @@ export function RecordsTable({ recordables, onEdit, onView }: RecordsTableProps)
                   <TableCell>{getProjectName(record.project_id)}</TableCell>
                   <TableCell>{getLedgerName(record.ledger_id)}</TableCell>
                   <TableCell>
-                    <Badge variant={record.type === 'asset' ? 'default' : 'secondary'} className={cn(record.type === 'asset' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800', 'border-none capitalize')}>{record.type === 'asset' ? 'Receivable' : 'Payable'}</Badge>
+                    <Badge variant={record.type === 'income' ? 'default' : 'secondary'} className={cn(record.type === 'income' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800', 'border-none capitalize')}>{record.type === 'income' ? 'Receivable' : 'Payable'}</Badge>
                   </TableCell>
                   <TableCell>
                     <Badge variant={record.status === 'paid' ? 'outline' : 'secondary'} className="capitalize">{record.status}</Badge>
                   </TableCell>
-                  <TableCell className={cn("text-right font-bold", record.type === 'asset' ? 'text-green-600' : 'text-red-600')}>{formatCurrency(record.amount)}</TableCell>
+                  <TableCell className={cn("text-right font-bold", (record.type === 'income' || (record as any).type === 'income') ? 'text-green-600' : 'text-red-600')}>{formatCurrency(record.amount)}</TableCell>
+                  <TableCell className="text-right text-muted-foreground">{formatCurrency(record.paid_amount || 0)}</TableCell>
+                  <TableCell className="text-right font-bold text-primary">{formatCurrency(record.balance_amount ?? record.amount)}</TableCell>
                   <TableCell className="text-right">
                     {onEdit && (
                       <DropdownMenu>
@@ -215,9 +221,9 @@ export function RecordsTable({ recordables, onEdit, onView }: RecordsTableProps)
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           {onView && <DropdownMenuItem onClick={() => onView(record)}><View className="mr-2 h-4 w-4" /> View Details</DropdownMenuItem>}
-                          {record.status === 'pending' && (
-                            <DropdownMenuItem onClick={() => handleConvertClick(record)} disabled={isPending}>
-                              <CheckCircle className="mr-2 h-4 w-4" /> Mark Paid
+                          {record.status !== 'paid' && (
+                            <DropdownMenuItem onClick={() => setRecordToSettle(record)} disabled={isPending}>
+                              <ReceiptText className="mr-2 h-4 w-4" /> Settle / Pay
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem onClick={() => onEdit(record)} disabled={isLocked || record.status === 'paid' || isPending}>
@@ -250,9 +256,9 @@ export function RecordsTable({ recordables, onEdit, onView }: RecordsTableProps)
             <div className="flex items-center gap-4 rounded-md border p-4">
               <div className={cn(
                 "flex h-10 w-10 items-center justify-center rounded-full",
-                recordToConvert?.type === 'asset' ? 'bg-green-100' : 'bg-red-100'
+                (recordToConvert?.type === 'income' || (recordToConvert as any)?.type === 'income') ? 'bg-green-100' : 'bg-red-100'
               )}>
-                {recordToConvert?.type === 'asset' ?
+                {(recordToConvert?.type === 'income' || (recordToConvert as any)?.type === 'income') ?
                   <span className="text-xl font-bold text-green-600">↓</span> :
                   <span className="text-xl font-bold text-red-600">↑</span>}
               </div>
@@ -260,7 +266,7 @@ export function RecordsTable({ recordables, onEdit, onView }: RecordsTableProps)
                 <p className="font-semibold">{recordToConvert?.description}</p>
                 <p className={cn(
                   "font-bold",
-                  recordToConvert?.type === 'asset' ? 'text-green-600' : 'text-red-600'
+                  (recordToConvert?.type === 'income' || (recordToConvert as any)?.type === 'income') ? 'text-green-600' : 'text-red-600'
                 )}>{formatCurrency(recordToConvert?.amount || 0)}</p>
               </div>
             </div>
@@ -302,6 +308,13 @@ export function RecordsTable({ recordables, onEdit, onView }: RecordsTableProps)
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {recordToSettle && (
+        <RecordSettlementDialog
+          open={!!recordToSettle}
+          onOpenChange={(open) => !open && setRecordToSettle(null)}
+          record={recordToSettle}
+        />
+      )}
     </TooltipProvider>
   );
 }

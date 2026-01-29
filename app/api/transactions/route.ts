@@ -78,7 +78,7 @@ export async function POST(req: Request) {
             return apiResponse.error(validation.error.issues[0].message);
         }
 
-        const { type, amount, description, date, projectId, ledgerId, paymentMode, convertedFromRecordId, hajariSettlementId, requestMessage } = validation.data;
+        const { type, amount, description, date, projectId, ledgerId, paymentMode, financialAccountId, convertedFromRecordId, hajariSettlementId, requestMessage } = validation.data;
 
         const userRole = (session.user.role?.toLowerCase() || 'user') as 'admin' | 'user';
 
@@ -104,8 +104,9 @@ export async function POST(req: Request) {
                 description,
                 date: new Date(date),
                 paymentMode: paymentMode || 'cash',
-                projectId,
-                ledgerId,
+                projectId: projectId as string,
+                ledgerId: ledgerId as string,
+                financialAccountId: financialAccountId || undefined,
                 organizationId: session.user.organizationId as string,
                 createdBy: session.user.id,
                 convertedFromRecordId: convertedFromRecordId || undefined,
@@ -113,7 +114,7 @@ export async function POST(req: Request) {
                 approvalStatus,
                 submittedBy: userRole === 'user' ? session.user.id : undefined,
                 requestMessage: userRole === 'user' ? (requestMessage || undefined) : undefined,
-            },
+            } as any,
         });
 
         await logAction({
@@ -167,7 +168,7 @@ export async function PUT(req: Request) {
 
         const userRole = (session.user.role?.toLowerCase() || 'user') as 'admin' | 'user';
 
-        const { type, amount, description, date, projectId, ledgerId, paymentMode, requestMessage } = validation.data;
+        const { type, amount, description, date, projectId, ledgerId, paymentMode, financialAccountId, requestMessage } = validation.data;
 
         // Check if approval is required
         if (requiresApproval('transaction', 'edit', userRole)) {
@@ -186,6 +187,7 @@ export async function PUT(req: Request) {
                         projectId: projectId || undefined,
                         ledgerId: ledgerId || undefined,
                         paymentMode,
+                        financialAccountId: financialAccountId || undefined,
                     } as any,
                 }
             });
@@ -213,8 +215,9 @@ export async function PUT(req: Request) {
                     projectId: projectId || undefined,
                     ledgerId: ledgerId || undefined,
                     paymentMode,
+                    ...(financialAccountId ? { financialAccountId } : {}),
                     approvalStatus: 'approved', // Reset to approved just in case
-                },
+                } as any,
             });
 
             await logAction({

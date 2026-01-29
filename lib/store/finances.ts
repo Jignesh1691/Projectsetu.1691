@@ -2,7 +2,7 @@
 
 import { updateState } from './state-manager';
 import { mapModelToStore, initializeStore } from './core';
-import { Transaction, Recordable, Ledger, User, PaymentMode } from '../definitions';
+import { Transaction, Recordable, RecordSettlement, Ledger, User, PaymentMode, FinancialAccount } from '../definitions';
 
 export const SALARY_HAJARI_LEDGER = 'Salary/Hajari';
 
@@ -38,7 +38,14 @@ export const addLedger = async (ledgerData: Omit<Ledger, 'id' | 'approval_status
         const response = await fetch('/api/ledgers', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...ledgerData, requestMessage }),
+            body: JSON.stringify({
+                ...ledgerData,
+                gstNumber: ledgerData.gst_number,
+                isGstRegistered: ledgerData.is_gst_registered,
+                billingAddress: ledgerData.billing_address,
+                state: ledgerData.state,
+                requestMessage
+            }),
         });
 
         if (!response.ok) {
@@ -61,7 +68,15 @@ export const editLedger = async (id: string, ledgerData: Partial<Ledger>, curren
         const response = await fetch('/api/ledgers', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, ...ledgerData, requestMessage }),
+            body: JSON.stringify({
+                id,
+                ...ledgerData,
+                gstNumber: ledgerData.gst_number,
+                isGstRegistered: ledgerData.is_gst_registered,
+                billingAddress: ledgerData.billing_address,
+                state: ledgerData.state,
+                requestMessage
+            }),
         });
 
         if (!response.ok) throw new Error("Failed to update ledger");
@@ -122,6 +137,7 @@ export const addTransaction = async (data: Omit<Transaction, 'id' | 'approval_st
                 projectId: data.project_id,
                 ledgerId: data.ledger_id,
                 paymentMode: data.payment_mode,
+                financialAccountId: data.financial_account_id,
                 billUrl: data.bill_url,
                 requestMessage
             }),
@@ -152,6 +168,7 @@ export const editTransaction = async (id: string, data: Partial<Transaction>, cu
                 projectId: data.project_id,
                 ledgerId: data.ledger_id,
                 paymentMode: data.payment_mode,
+                financialAccountId: data.financial_account_id,
                 billUrl: data.bill_url,
                 requestMessage
             }),
@@ -211,12 +228,36 @@ export const addRecordable = async (data: Omit<Recordable, 'id' | 'approval_stat
                 ledgerId: data.ledger_id,
                 dueDate: data.due_date,
                 paymentMode: data.payment_mode,
+                financialAccountId: data.financial_account_id,
                 billUrl: data.bill_url,
+                invoiceNumber: data.invoice_number,
+                invoiceDate: data.invoice_date,
+                taxableAmount: data.taxable_amount,
+                cgstRate: data.cgst_rate,
+                cgstAmount: data.cgst_amount,
+                sgstRate: data.sgst_rate,
+                sgstAmount: data.sgst_amount,
+                igstRate: data.igst_rate,
+                igstAmount: data.igst_amount,
+                cessAmount: data.cess_amount,
+                totalGstAmount: data.total_gst_amount,
+                roundOffAmount: data.round_off_amount,
                 requestMessage
             }),
         });
 
-        if (!response.ok) throw new Error("Failed to add record");
+        if (!response.ok) {
+            const errorText = await response.text();
+            let errorMessage = "Failed to add record";
+            try {
+                const errorJson = JSON.parse(errorText);
+                errorMessage = errorJson.error || errorMessage;
+            } catch (e) {
+                errorMessage = errorText || errorMessage;
+            }
+            console.error("API Error adding record:", errorMessage);
+            throw new Error(errorMessage);
+        }
 
         const newRecord = await response.json();
         const mappedRecord = mapModelToStore('recordable', newRecord);
@@ -239,7 +280,20 @@ export const editRecordable = async (id: string, data: Partial<Recordable>, curr
                 ledgerId: data.ledger_id,
                 dueDate: data.due_date,
                 paymentMode: data.payment_mode,
+                financialAccountId: data.financial_account_id,
                 billUrl: data.bill_url,
+                invoiceNumber: data.invoice_number,
+                invoiceDate: data.invoice_date,
+                taxableAmount: data.taxable_amount,
+                cgstRate: data.cgst_rate,
+                cgstAmount: data.cgst_amount,
+                sgstRate: data.sgst_rate,
+                sgstAmount: data.sgst_amount,
+                igstRate: data.igst_rate,
+                igstAmount: data.igst_amount,
+                cessAmount: data.cess_amount,
+                totalGstAmount: data.total_gst_amount,
+                roundOffAmount: data.round_off_amount,
                 requestMessage
             }),
         });
@@ -289,13 +343,14 @@ export const deleteRecordable = async (id: string, currentUser: User, requestMes
 export const convertRecordable = async (record: Recordable) => {
     try {
         const transactionData: any = {
-            type: record.type === 'asset' ? 'income' : 'expense',
+            type: record.type === 'income' ? 'income' : 'expense',
             amount: record.amount,
             description: `Converted: ${record.description}`,
             date: new Date().toISOString(),
             project_id: record.project_id,
             ledger_id: record.ledger_id,
             payment_mode: record.payment_mode,
+            financial_account_id: record.financial_account_id,
             bill_url: record.bill_url,
             converted_from_record_id: record.id,
         };
@@ -308,6 +363,7 @@ export const convertRecordable = async (record: Recordable) => {
                 projectId: transactionData.project_id,
                 ledgerId: transactionData.ledger_id,
                 paymentMode: transactionData.payment_mode,
+                financialAccountId: transactionData.financial_account_id,
                 convertedFromRecordId: transactionData.converted_from_record_id,
             }),
         });
@@ -339,6 +395,63 @@ export const convertRecordable = async (record: Recordable) => {
         });
     } catch (error) {
         console.error("Error converting recordable:", error);
+        throw error;
+    }
+};
+
+export const addRecordSettlement = async (recordId: string, data: any) => {
+    try {
+        const response = await fetch(`/api/records/${recordId}/settlements`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                settlementDate: data.settlement_date,
+                amountPaid: data.amount_paid,
+                paymentMode: data.payment_mode,
+                financialAccountId: data.financial_account_id,
+                remarks: data.remarks,
+                convertToTransaction: !!data.convert_to_transaction,
+            }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || "Failed to add settlement");
+        }
+
+        const result = await response.json();
+        const mappedRecord = mapModelToStore('recordable', result.record);
+
+        updateState(prev => {
+            const recordIndex = prev.recordables.findIndex((r: Recordable) => r.id === recordId);
+            if (recordIndex === -1) return prev;
+
+            const updatedRecordables = [...prev.recordables];
+            updatedRecordables[recordIndex] = mappedRecord;
+
+            return {
+                ...prev,
+                recordables: updatedRecordables,
+            };
+        });
+
+        // If converted to transaction, we might want to refresh transactions
+        if (data.convert_to_transaction) {
+            fetch('/api/transactions')
+                .then(res => res.json())
+                .then(transactions => {
+                    updateState(prev => ({
+                        ...prev,
+                        transactions: Array.isArray(transactions)
+                            ? transactions.map((t: any) => mapModelToStore('transaction', t))
+                            : prev.transactions
+                    }));
+                });
+        }
+
+        return result;
+    } catch (error) {
+        console.error("Error adding record settlement:", error);
         throw error;
     }
 };
@@ -378,16 +491,16 @@ export const revertConvertedTransaction = async (transaction: Transaction) => {
     }
 };
 
-// --- Quick Entry ---
 export interface QuickEntryItem {
     entryType: 'transaction' | 'recordable';
-    type: 'income' | 'expense' | 'asset' | 'liability';
+    type: 'income' | 'expense';
     amount: number;
     description: string;
     date: Date;
     project_id: string;
     ledger_id: string;
     payment_mode: 'cash' | 'bank';
+    financial_account_id?: string;
 }
 
 export const addMultipleItems = async (items: QuickEntryItem[], currentUser: User, requestMessage?: string) => {
@@ -404,6 +517,7 @@ export const addMultipleItems = async (items: QuickEntryItem[], currentUser: Use
                 projectId: item.project_id,
                 ledgerId: item.ledger_id,
                 paymentMode: item.payment_mode,
+                financialAccountId: item.financial_account_id,
                 date: item.date instanceof Date ? item.date.toISOString() : (item.date as string),
                 requestMessage,
             };
@@ -442,6 +556,53 @@ export const addMultipleItems = async (items: QuickEntryItem[], currentUser: Use
         });
     } catch (error) {
         console.error("Error adding multiple items:", error);
+        throw error;
+    }
+};
+
+export const addFinancialAccount = async (data: Omit<FinancialAccount, 'id'>, currentUser: User) => {
+    try {
+        const response = await fetch('/api/financial-accounts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || "Failed to create account");
+        }
+
+        const newAccount = await response.json();
+        updateState(prev => ({ ...prev, financial_accounts: [...prev.financial_accounts, newAccount] }));
+        return newAccount;
+    } catch (error) {
+        console.error("Error adding financial account:", error);
+        throw error;
+    }
+};
+
+export const editFinancialAccount = async (id: string, data: Partial<FinancialAccount>, currentUser: User) => {
+    try {
+        const response = await fetch('/api/financial-accounts', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, ...data }),
+        });
+
+        if (!response.ok) throw new Error("Failed to update account");
+
+        const updatedAccount = await response.json();
+
+        updateState(prev => {
+            const index = prev.financial_accounts.findIndex((a: FinancialAccount) => a.id === id);
+            if (index === -1) return prev;
+            const updated = [...prev.financial_accounts];
+            updated[index] = updatedAccount;
+            return { ...prev, financial_accounts: updated };
+        });
+    } catch (error) {
+        console.error("Error editing financial account:", error);
         throw error;
     }
 };

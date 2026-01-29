@@ -26,5 +26,6 @@ export const defaultState = {
   materials: [],
   material_ledger: [],
   journal_entries: [],
+  financial_accounts: [],
 };
 

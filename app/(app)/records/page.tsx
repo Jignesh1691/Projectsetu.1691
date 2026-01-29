@@ -22,6 +22,7 @@ import * as XLSX from "xlsx";
 import { useToast } from '@/hooks/use-toast';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
 
@@ -72,8 +73,8 @@ export default function RecordsPage() {
       created_by: selectedUser === ALL_USERS ? undefined : selectedUser,
       dateRange: dateRange,
       payment_mode: paymentMode === ALL_PAYMENT_MODES ? undefined : paymentMode as PaymentMode,
-      type: selectedType === 'all' ? undefined : selectedType as 'asset' | 'liability',
-      status: selectedStatus === 'all' ? undefined : selectedStatus as 'pending' | 'paid',
+      type: selectedType === 'all' ? undefined : selectedType as 'income' | 'expense',
+      status: selectedStatus === 'all' ? undefined : selectedStatus as 'pending' | 'partial' | 'paid',
     });
 
     return [...filtered].sort((a, b) => new Date(b.due_date).getTime() - new Date(a.due_date).getTime());
@@ -123,8 +124,12 @@ export default function RecordsPage() {
 
   const summary = useMemo(() => {
     if (!isLoaded) return { totalReceivable: 0, totalPayable: 0, netOutstanding: 0 };
-    const totalReceivable = filteredRecords.filter(t => t.type === 'asset' && t.status === 'pending').reduce((sum, t) => sum + t.amount, 0);
-    const totalPayable = filteredRecords.filter(t => t.type === 'liability' && t.status === 'pending').reduce((sum, t) => sum + t.amount, 0);
+    const totalReceivable = filteredRecords
+      .filter(t => (t.type === 'income' || (t as any).type === 'income') && t.status !== 'paid')
+      .reduce((sum, t) => sum + (t.balance_amount ?? t.amount), 0);
+    const totalPayable = filteredRecords
+      .filter(t => (t.type === 'expense' || (t as any).type === 'expense') && t.status !== 'paid')
+      .reduce((sum, t) => sum + (t.balance_amount ?? t.amount), 0);
     return {
       totalReceivable,
       totalPayable,
@@ -245,8 +250,8 @@ export default function RecordsPage() {
       getProjectName(r.project_id),
       getLedgerName(r.ledger_id),
       r.description,
-      r.type === 'asset' ? `Rs. ${formatCurrency(r.amount, true)}` : '-',
-      r.type === 'liability' ? `Rs. ${formatCurrency(r.amount, true)}` : '-',
+      (r.type === 'income' || (r as any).type === 'income') ? `Rs. ${formatCurrency(r.amount, true)}` : '-',
+      (r.type === 'expense' || (r as any).type === 'expense') ? `Rs. ${formatCurrency(r.amount, true)}` : '-',
       r.status.toUpperCase()
     ]);
 
@@ -303,9 +308,11 @@ export default function RecordsPage() {
       'Due Date': new Date(r.due_date).toLocaleDateString(),
       'Project': getProjectName(r.project_id),
       'Ledger': getLedgerName(r.ledger_id),
-      'Type': r.type,
+      'Type': r.type === 'income' ? 'Receivable' : 'Payable',
       'Description': r.description,
-      'Amount': r.amount,
+      'Total Amount': r.amount,
+      'Paid Amount': r.paid_amount || 0,
+      'Balance': r.balance_amount ?? r.amount,
       'Payment Mode': r.payment_mode,
       'Status': r.status,
     })));
@@ -345,8 +352,8 @@ export default function RecordsPage() {
                       </SelectTrigger>
                       <SelectContent className="rounded-xl">
                         <SelectItem value="all">All Types</SelectItem>
-                        <SelectItem value="asset">Receivable</SelectItem>
-                        <SelectItem value="liability">Payable</SelectItem>
+                        <SelectItem value="income">Receivable (Income)</SelectItem>
+                        <SelectItem value="expense">Payable (Expense)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -359,6 +366,7 @@ export default function RecordsPage() {
                       <SelectContent className="rounded-xl">
                         <SelectItem value="all">All Status</SelectItem>
                         <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="partial">Partial</SelectItem>
                         <SelectItem value="paid">Paid</SelectItem>
                       </SelectContent>
                     </Select>
@@ -520,17 +528,51 @@ export default function RecordsPage() {
             </DialogDescription>
           </DialogHeader>
           {viewingRecord && (
-            <div className="py-4 space-y-4 text-sm">
+            <div className="py-4 space-y-4 text-sm max-h-[70vh] overflow-y-auto pr-2">
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                <div className="text-muted-foreground">Amount</div>
-                <div className={cn('font-bold text-right', viewingRecord.type === 'asset' ? 'text-green-600' : 'text-red-600')}>{formatCurrency(viewingRecord.amount)}</div>
+                <div className="text-muted-foreground">Description</div>
+                <div className="text-right font-medium">{viewingRecord.description}</div>
+
+                <div className="text-muted-foreground border-t pt-2">Total Amount</div>
+                <div className={cn('font-bold text-right border-t pt-2', (viewingRecord.type === 'income' || (viewingRecord as any).type === 'income') ? 'text-green-600' : 'text-red-600')}>{formatCurrency(viewingRecord.amount)}</div>
+
+                <div className="text-muted-foreground">Paid Amount</div>
+                <div className="text-right text-muted-foreground">{formatCurrency(viewingRecord.paid_amount || 0)}</div>
+
+                <div className="text-muted-foreground text-xs font-bold uppercase mt-1">Balance Due</div>
+                <div className="text-right font-bold text-primary text-base">{formatCurrency(viewingRecord.balance_amount ?? viewingRecord.amount)}</div>
+
+                {viewingRecord.invoice_number && (
+                  <>
+                    <div className="col-span-2 border-t mt-2 mb-1" />
+                    <div className="text-muted-foreground font-bold uppercase text-[10px]">GST Invoice Details</div>
+                    <div className="text-right"></div>
+
+                    <div className="text-muted-foreground">Invoice No.</div>
+                    <div className="text-right font-mono">{viewingRecord.invoice_number}</div>
+
+                    <div className="text-muted-foreground">Invoice Date</div>
+                    <div className="text-right">{viewingRecord.invoice_date ? format(new Date(viewingRecord.invoice_date), 'dd/MM/yyyy') : 'N/A'}</div>
+
+                    <div className="text-muted-foreground">Taxable Amount</div>
+                    <div className="text-right font-semibold">{formatCurrency(viewingRecord.taxable_amount || 0)}</div>
+
+                    <div className="text-muted-foreground">Total GST</div>
+                    <div className="text-right font-semibold">{formatCurrency(viewingRecord.total_gst_amount || 0)}</div>
+
+                    {(viewingRecord.cgst_amount || 0) > 0 && <div className="text-[10px] text-muted-foreground col-span-2 text-right">CGST: {formatCurrency(viewingRecord.cgst_amount || 0)} | SGST: {formatCurrency(viewingRecord.sgst_amount || 0)}</div>}
+                    {(viewingRecord.igst_amount || 0) > 0 && <div className="text-[10px] text-muted-foreground col-span-2 text-right">IGST: {formatCurrency(viewingRecord.igst_amount || 0)}</div>}
+                  </>
+                )}
+
+                <div className="col-span-2 border-t mt-2 mb-1" />
 
                 <div className="text-muted-foreground">Type</div>
-                <div className="text-right capitalize">{viewingRecord.type}</div>
+                <div className="text-right capitalize">{viewingRecord.type === 'income' ? 'Receivable' : 'Payable'}</div>
 
                 <div className="text-muted-foreground">Status</div>
                 <div className="text-right">
-                  <Badge variant={viewingRecord.status === 'paid' ? 'outline' : 'secondary'} className="capitalize">
+                  <Badge variant={viewingRecord.status === 'paid' ? 'outline' : viewingRecord.status === 'partial' ? 'secondary' : 'default'} className="capitalize bg-primary/10 text-primary border-none">
                     {viewingRecord.status}
                   </Badge>
                 </div>
@@ -542,7 +584,7 @@ export default function RecordsPage() {
                 <div className="text-right">{getProjectName(viewingRecord.project_id)}</div>
 
                 <div className="text-muted-foreground">Ledger</div>
-                <div className="text-right">{getLedgerName(viewingRecord.ledger_id)}</div>
+                <div className="text-right underline decoration-dotted">{getLedgerName(viewingRecord.ledger_id)}</div>
 
                 <div className="text-muted-foreground">Payment Mode</div>
                 <div className="text-right capitalize">{viewingRecord.payment_mode}</div>
@@ -550,10 +592,28 @@ export default function RecordsPage() {
                 <div className="text-muted-foreground">Entry By</div>
                 <div className="text-right">{getUserName(viewingRecord.created_by || '')}</div>
               </div>
+
+              {viewingRecord.settlements && viewingRecord.settlements.length > 0 && (
+                <div className="mt-4 border-t pt-4">
+                  <h4 className="text-[10px] font-bold uppercase text-muted-foreground mb-2">Payment History</h4>
+                  <div className="space-y-2">
+                    {viewingRecord.settlements.map((s, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-muted/20 p-2 rounded-lg text-[10px]">
+                        <div>
+                          <p className="font-bold">{format(new Date(s.settlement_date), 'dd/MM/yy')}</p>
+                          <p className="text-muted-foreground capitalize">{s.payment_mode} {s.remarks && `• ${s.remarks}`}</p>
+                        </div>
+                        <div className="font-bold text-primary">₹{s.amount_paid.toLocaleString()}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {viewingRecord.bill_url && (
-                <Button asChild variant="outline" className="w-full">
+                <Button asChild variant="outline" className="w-full mt-2 rounded-xl border-primary/20 hover:bg-primary/5">
                   <a href={viewingRecord.bill_url} target="_blank" rel="noopener noreferrer">
-                    <FileText className="mr-2 h-4 w-4" /> View Attached Bill
+                    <FileText className="mr-2 h-4 w-4 text-primary" /> View Attachment
                   </a>
                 </Button>
               )}

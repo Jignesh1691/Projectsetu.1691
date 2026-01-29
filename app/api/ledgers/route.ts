@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     }
 
     try {
-        const { name, requestMessage } = await req.json();
+        const { name, category, type, gstNumber, isGstRegistered, billingAddress, state, requestMessage } = await req.json();
 
         if (!name) {
             return NextResponse.json({ error: "Ledger name is required" }, { status: 400 });
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
         const organizationId = session.user.organizationId;
         const userRole = (session.user.role?.toLowerCase() || 'user') as 'admin' | 'user';
 
-        const existingLedger = await prisma.ledger.findUnique({
+        const existingLedger = await (prisma as any).ledger.findUnique({
             where: {
                 organizationId_name: {
                     organizationId: organizationId as string,
@@ -68,9 +68,14 @@ export async function POST(req: Request) {
             ? 'pending-create'
             : 'approved';
 
-        const ledger = await prisma.ledger.create({
+        const ledger = await (prisma as any).ledger.create({
             data: {
                 name,
+                category: category || type,
+                gstNumber,
+                isGstRegistered: !!isGstRegistered,
+                billingAddress,
+                state,
                 organizationId: organizationId as string,
                 approvalStatus,
                 submittedBy: userRole === 'user' ? session.user.id : undefined,
@@ -94,13 +99,13 @@ export async function PUT(req: Request) {
     }
 
     try {
-        const { id, name, requestMessage } = await req.json();
+        const { id, name, category, type, gstNumber, isGstRegistered, billingAddress, state, requestMessage } = await req.json();
 
         if (!id) {
             return NextResponse.json({ error: "Ledger ID is required" }, { status: 400 });
         }
 
-        const ledger = await prisma.ledger.findUnique({
+        const ledger = await (prisma as any).ledger.findUnique({
             where: { id },
         });
 
@@ -113,7 +118,7 @@ export async function PUT(req: Request) {
         // Check if approval is required
         if (requiresApproval('ledger', 'edit', userRole)) {
             // User: Create pending edit request
-            const updated = await prisma.ledger.update({
+            const updated = await (prisma as any).ledger.update({
                 where: { id },
                 data: {
                     approvalStatus: 'pending-edit',
@@ -121,16 +126,26 @@ export async function PUT(req: Request) {
                     requestMessage: requestMessage,
                     pendingData: {
                         name,
+                        category: category || type,
+                        gstNumber,
+                        isGstRegistered,
+                        billingAddress,
+                        state,
                     } as any,
                 }
             });
             return NextResponse.json(updated);
         } else {
             // Admin or no approval required: Apply immediately
-            const updatedLedger = await prisma.ledger.update({
+            const updatedLedger = await (prisma as any).ledger.update({
                 where: { id },
                 data: {
                     name,
+                    category: category || type,
+                    gstNumber,
+                    isGstRegistered: isGstRegistered !== undefined ? !!isGstRegistered : undefined,
+                    billingAddress,
+                    state,
                     approvalStatus: 'approved',
                 },
             });

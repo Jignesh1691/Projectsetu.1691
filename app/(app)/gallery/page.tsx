@@ -221,18 +221,57 @@ export default function GalleryPage() {
             {filteredPhotos.map((photo) => {
               const isLocked = (photo.rejection_count || 0) >= REJECTION_LIMIT && currentUser?.role !== 'admin';
               return (
-                <Card key={photo.id} className="overflow-hidden">
-                  <div className="aspect-video relative w-full cursor-pointer" onClick={() => setViewingPhoto(photo)}>
+                <Card key={photo.id} className="group overflow-hidden rounded-2xl border-border/50 bg-card hover:shadow-xl hover:shadow-primary/5 transition-all duration-300">
+                  <div className="aspect-video relative w-full cursor-pointer overflow-hidden" onClick={() => setViewingPhoto(photo)}>
                     <Image
                       src={photo.image_url}
                       alt={photo.description}
                       fill
-                      className="object-cover"
+                      className="object-cover transition-transform duration-500 group-hover:scale-110"
                     />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                      <Button variant="secondary" size="sm" className="rounded-full bg-white/90 backdrop-blur-sm text-black border-0 shadow-lg scale-90 group-hover:scale-100 transition-transform duration-300">
+                        <View className="h-4 w-4 mr-2" /> View
+                      </Button>
+                    </div>
+                    {photo.approval_status && photo.approval_status !== 'approved' && (
+                      <div className="absolute top-3 left-3">
+                        <Badge variant={photo.approval_status.includes('pending') ? 'secondary' : 'destructive'} className="rounded-full backdrop-blur-md bg-black/50 text-[10px] border-0 px-2 py-0.5">
+                          {photo.approval_status.replace('pending-', 'Waiting: ')}
+                        </Badge>
+                      </div>
+                    )}
                   </div>
-                  <div className="p-3">
-                    <p className="font-semibold truncate">{photo.description}</p>
-                    <p className="text-sm text-muted-foreground">{getProjectName(photo.project_id)}</p>
+                  <div className="p-4 flex items-start justify-between gap-3">
+                    <div className="space-y-1 min-w-0">
+                      <h4 className="font-bold text-sm truncate tracking-tight">{photo.description}</h4>
+                      <div className="flex items-center text-[10px] font-medium text-muted-foreground uppercase tracking-widest">
+                        <Badge variant="outline" className="text-[9px] py-0 px-1.5 rounded-md border-border/50 bg-muted/30 mr-2">{getProjectName(photo.project_id)}</Badge>
+                        <span>{new Date(photo.created_at).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50 -mr-1">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-40 rounded-xl shadow-xl border-border/50">
+                        <DropdownMenuItem onClick={() => setViewingPhoto(photo)} className="rounded-lg cursor-pointer">
+                          <View className="mr-2 h-4 w-4" /> View Large
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEditClick(photo)} className="rounded-lg cursor-pointer">
+                          <Pencil className="mr-2 h-4 w-4" /> Edit Details
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator className="bg-border/50" />
+                        <DropdownMenuItem
+                          className="rounded-lg text-rose-600 focus:text-rose-600 focus:bg-rose-50 dark:focus:bg-rose-950/30 cursor-pointer"
+                          onClick={() => handleDeleteClick(photo.id)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" /> Delete Photo
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </Card>
               )

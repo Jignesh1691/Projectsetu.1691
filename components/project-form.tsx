@@ -16,16 +16,23 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useAppState } from '@/hooks/use-store';
 import { useToast } from '@/hooks/use-toast';
 import { Project } from '@/lib/definitions';
 import { addProject, editProject } from '@/lib/store';
-import { Checkbox } from '@/components/ui/checkbox';
+
 
 const formSchema = z.object({
   name: z.string().min(2, 'Project name must be at least 2 characters.'),
   location: z.string().optional(),
-  assigned_users: z.array(z.string()),
+  status: z.enum(['ACTIVE', 'COMPLETED', 'ON_HOLD']),
 });
 
 interface ProjectFormProps {
@@ -35,7 +42,7 @@ interface ProjectFormProps {
 }
 
 export function ProjectForm({ setOpen, project, onProjectCreated }: ProjectFormProps) {
-  const { projects, project_users, users, appUser } = useAppState();
+  const { projects, appUser } = useAppState();
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -43,9 +50,7 @@ export function ProjectForm({ setOpen, project, onProjectCreated }: ProjectFormP
     defaultValues: {
       name: project?.name || '',
       location: project?.location || '',
-      assigned_users: project
-        ? project_users.filter(pu => pu.project_id === project.id).map(pu => pu.user_id)
-        : (appUser ? [appUser.id] : []),
+      status: project?.status || 'ACTIVE',
     },
   });
 
@@ -66,14 +71,21 @@ export function ProjectForm({ setOpen, project, onProjectCreated }: ProjectFormP
 
     try {
       if (project) {
-        await editProject(project.id, { name: values.name, location: values.location }, values.assigned_users);
+        await editProject(project.id, {
+          name: values.name,
+          location: values.location,
+          status: values.status
+        });
         toast({
           title: 'Success!',
           description: `Project "${values.name}" has been updated.`,
         });
       } else {
-        console.log("DEBUG: Submitting new project with users:", values.assigned_users);
-        const createdProject = await addProject({ name: values.name, location: values.location }, values.assigned_users);
+        const createdProject = await addProject({
+          name: values.name,
+          location: values.location,
+          status: values.status
+        });
         toast({
           title: 'Success!',
           description: `Project "${values.name}" has been created.`,
@@ -133,54 +145,22 @@ export function ProjectForm({ setOpen, project, onProjectCreated }: ProjectFormP
 
         <FormField
           control={form.control}
-          name="assigned_users"
-          render={() => (
-            <FormItem className="space-y-2">
-              <div className="mb-2">
-                <FormLabel className="text-xs font-bold uppercase text-muted-foreground/70">Assign Users</FormLabel>
-                <FormDescription className="text-[10px]">
-                  Select the users who will be assigned to this project.
-                </FormDescription>
-              </div>
-              <div className="rounded-xl border p-3 max-h-[180px] overflow-y-auto bg-card/50">
-                <div className="space-y-1.5">
-                  {users.map((user) => (
-                    <FormField
-                      key={user.id}
-                      control={form.control}
-                      name="assigned_users"
-                      render={({ field }) => {
-                        return (
-                          <FormItem
-                            key={user.id}
-                            className="flex flex-row items-center space-x-3 space-y-0"
-                          >
-                            <FormControl>
-                              <Checkbox
-                                checked={field.value?.includes(user.id)}
-                                onCheckedChange={(checked) => {
-                                  const current = field.value || [];
-                                  return checked
-                                    ? field.onChange([...current, user.id])
-                                    : field.onChange(
-                                      current.filter(
-                                        (value) => value !== user.id
-                                      )
-                                    )
-                                }}
-                                className="h-4 w-4"
-                              />
-                            </FormControl>
-                            <FormLabel className="font-normal cursor-pointer text-sm">
-                              {user.name} <span className="text-xs text-muted-foreground">({user.role})</span>
-                            </FormLabel>
-                          </FormItem>
-                        )
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
+          name="status"
+          render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel className="text-xs font-bold uppercase text-muted-foreground/70">Status</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormControl>
+                  <SelectTrigger className="h-9 md:h-10 rounded-xl">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="ACTIVE">Active</SelectItem>
+                  <SelectItem value="COMPLETED">Completed</SelectItem>
+                  <SelectItem value="ON_HOLD">On Hold</SelectItem>
+                </SelectContent>
+              </Select>
               <FormMessage />
             </FormItem>
           )}

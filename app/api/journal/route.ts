@@ -40,7 +40,7 @@ export async function POST(req: Request) {
         }
 
         const body = await req.json();
-        const { date, description, amount, debitMode, debitLedgerId, creditMode, creditLedgerId, debitProjectId, creditProjectId } = body;
+        const { date, description, amount, debitMode, debitLedgerId, debitAccountId, creditMode, creditLedgerId, creditAccountId, debitProjectId, creditProjectId } = body;
 
         // Validation
         if (!date || !amount || !description || !debitMode || !creditMode) {
@@ -48,7 +48,9 @@ export async function POST(req: Request) {
         }
 
         if (debitMode === 'ledger' && !debitLedgerId) return apiResponse.error("Debit Ledger ID required");
+        if (debitMode !== 'ledger' && !debitAccountId) return apiResponse.error("Debit Account ID required");
         if (creditMode === 'ledger' && !creditLedgerId) return apiResponse.error("Credit Ledger ID required");
+        if (creditMode !== 'ledger' && !creditAccountId) return apiResponse.error("Credit Account ID required");
 
         // Project ID validation
         if (!debitProjectId) return apiResponse.error("Debit Project ID required");
@@ -61,20 +63,24 @@ export async function POST(req: Request) {
                 amount: parseFloat(amount),
                 debitMode,
                 debitLedgerId: debitMode === 'ledger' && debitLedgerId ? debitLedgerId : null,
+                debitAccountId: debitMode !== 'ledger' && debitAccountId ? debitAccountId : null,
                 creditMode,
                 creditLedgerId: creditMode === 'ledger' && creditLedgerId ? creditLedgerId : null,
+                creditAccountId: creditMode !== 'ledger' && creditAccountId ? creditAccountId : null,
                 debitProjectId: debitProjectId,
                 creditProjectId: creditProjectId,
                 organizationId: session.user.organizationId as string,
                 createdBy: session.user.id as string,
-            },
+            } as any,
             include: {
                 debitLedger: { select: { id: true, name: true } },
                 creditLedger: { select: { id: true, name: true } },
+                debitAccount: { select: { id: true, name: true } },
+                creditAccount: { select: { id: true, name: true } },
                 debitProject: { select: { id: true, name: true } },
                 creditProject: { select: { id: true, name: true } },
                 creator: { select: { id: true, name: true, email: true } }
-            }
+            } as any
         });
 
         await logAction({
@@ -109,7 +115,7 @@ export async function PUT(req: Request) {
         if (!journal || journal.organizationId !== session.user.organizationId) return apiResponse.notFound("Journal Entry");
 
         const userRole = (session.user.role?.toLowerCase() || 'user') as 'admin' | 'user';
-        const { date, amount, description, debitMode, debitLedgerId, creditMode, creditLedgerId, debitProjectId, creditProjectId, requestMessage } = validation.data;
+        const { date, amount, description, debitMode, debitLedgerId, debitAccountId, creditMode, creditLedgerId, creditAccountId, debitProjectId, creditProjectId, requestMessage } = validation.data;
 
         if (requiresApproval('journal', 'edit', userRole)) {
             const updated = await prisma.journalEntry.update({
@@ -124,8 +130,10 @@ export async function PUT(req: Request) {
                         description,
                         debitMode,
                         debitLedgerId,
+                        debitAccountId,
                         creditMode,
                         creditLedgerId,
+                        creditAccountId,
                         debitProjectId,
                         creditProjectId
                     } as any,
@@ -152,12 +160,14 @@ export async function PUT(req: Request) {
                     description,
                     debitMode,
                     debitLedgerId: debitMode === 'ledger' && debitLedgerId ? debitLedgerId : null,
+                    debitAccountId: debitMode !== 'ledger' && debitAccountId ? debitAccountId : null,
                     creditMode,
                     creditLedgerId: creditMode === 'ledger' && creditLedgerId ? creditLedgerId : null,
+                    creditAccountId: creditMode !== 'ledger' && creditAccountId ? creditAccountId : null,
                     debitProjectId,
                     creditProjectId,
                     approvalStatus: 'approved'
-                }
+                } as any
             });
 
             await logAction({

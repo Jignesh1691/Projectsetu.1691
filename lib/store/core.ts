@@ -26,21 +26,23 @@ export const initializeStore = async (setState: AppStateSetter) => {
     try {
         // --- Phase 1: Critical Metadata (Instant UI / Sidebar) ---
         const [
-            projectsRes, ledgersRes, usersRes, laborsRes, materialsRes
+            projectsRes, ledgersRes, usersRes, laborsRes, materialsRes, financialAccountsRes
         ] = await Promise.all([
             fetch('/api/projects'),
             fetch('/api/ledgers'),
             fetch('/api/users'),
             fetch('/api/labors'),
             fetch('/api/materials'),
+            fetch('/api/financial-accounts'),
         ]);
 
-        const [users, projects, ledgers, labors, materials] = await Promise.all([
+        const [users, projects, ledgers, labors, materials, financialAccounts] = await Promise.all([
             usersRes.ok ? usersRes.json() : [],
             projectsRes.ok ? projectsRes.json() : [],
             ledgersRes.ok ? ledgersRes.json() : [],
             laborsRes.ok ? laborsRes.json() : [],
             materialsRes.ok ? materialsRes.json() : [],
+            financialAccountsRes.ok ? financialAccountsRes.json() : [],
         ]);
 
         // Map users immediately for permission checks
@@ -75,6 +77,7 @@ export const initializeStore = async (setState: AppStateSetter) => {
             ledgers: Array.isArray(ledgers) ? ledgers.map((l: any) => mapModelToStore('ledger', l)) : [],
             labors: Array.isArray(labors) ? labors : [],
             materials: Array.isArray(materials) ? materials.map((m: any) => mapModelToStore('material', m)) : [],
+            financial_accounts: Array.isArray(financialAccounts) ? financialAccounts : [],
             isInitialized: true // UNBLOCK UI HERE
         }));
 
@@ -157,6 +160,9 @@ export function mapModelToStore(itemType: string, item: any): any {
     if (item.organizationId) mapped.organization_id = item.organizationId;
     if (item.projectId) mapped.project_id = item.projectId;
     if (item.ledgerId) mapped.ledger_id = item.ledgerId;
+    if (item.financialAccountId) mapped.financial_account_id = item.financialAccountId;
+    if (item.debitAccountId) mapped.debit_account_id = item.debitAccountId;
+    if (item.creditAccountId) mapped.credit_account_id = item.creditAccountId;
 
     switch (itemType.toLowerCase()) {
         case 'transaction':
@@ -170,6 +176,43 @@ export function mapModelToStore(itemType: string, item: any): any {
             if (item.dueDate) mapped.due_date = item.dueDate;
             if (item.paymentMode) mapped.payment_mode = item.paymentMode;
             if (item.billUrl) mapped.bill_url = item.billUrl;
+
+            // GST Fields
+            if (item.invoiceNumber) mapped.invoice_number = item.invoiceNumber;
+            if (item.invoiceDate) mapped.invoice_date = item.invoiceDate;
+            if (item.taxableAmount !== undefined) mapped.taxable_amount = item.taxableAmount;
+            if (item.cgstRate !== undefined) mapped.cgst_rate = item.cgstRate;
+            if (item.cgstAmount !== undefined) mapped.cgst_amount = item.cgstAmount;
+            if (item.sgstRate !== undefined) mapped.sgst_rate = item.sgstRate;
+            if (item.sgstAmount !== undefined) mapped.sgst_amount = item.sgstAmount;
+            if (item.igstRate !== undefined) mapped.igst_rate = item.igstRate;
+            if (item.igstAmount !== undefined) mapped.igst_amount = item.igstAmount;
+            if (item.cessAmount !== undefined) mapped.cess_amount = item.cessAmount;
+            if (item.totalGstAmount !== undefined) mapped.total_gst_amount = item.totalGstAmount;
+            if (item.roundOffAmount !== undefined) mapped.round_off_amount = item.roundOffAmount;
+
+            // Payment tracking
+            if (item.paidAmount !== undefined) mapped.paid_amount = item.paidAmount;
+            if (item.balanceAmount !== undefined) mapped.balance_amount = item.balanceAmount;
+            if (Array.isArray(item.settlements)) {
+                mapped.settlements = item.settlements.map((s: any) => mapModelToStore('recordsettlement', s));
+            }
+            break;
+        case 'ledger':
+            if (item.gstNumber) mapped.gst_number = item.gstNumber;
+            if (item.isGstRegistered !== undefined) mapped.is_gst_registered = item.isGstRegistered;
+            if (item.billingAddress) mapped.billing_address = item.billingAddress;
+            if (item.state) mapped.state = item.state;
+            if (item.category) mapped.category = item.category;
+            break;
+        case 'recordsettlement':
+            if (item.recordId) mapped.record_id = item.recordId;
+            if (item.settlementDate) mapped.settlement_date = item.settlementDate;
+            if (item.amountPaid !== undefined) mapped.amount_paid = item.amountPaid;
+            if (item.paymentMode) mapped.payment_mode = item.paymentMode;
+            if (item.transactionId) mapped.transaction_id = item.transactionId;
+            if (item.financialAccountId) mapped.financial_account_id = item.financialAccountId;
+            if (item.financialAccount) mapped.financial_account = item.financialAccount;
             break;
         case 'hajari':
             if (item.laborId) mapped.labor_id = item.laborId;
@@ -194,10 +237,14 @@ export function mapModelToStore(itemType: string, item: any): any {
         case 'journalentry':
             if (item.debitMode) mapped.debit_mode = item.debitMode;
             if (item.debitLedgerId) mapped.debit_ledger_id = item.debitLedgerId;
+            if (item.debitAccountId) mapped.debit_account_id = item.debitAccountId;
             if (item.creditMode) mapped.credit_mode = item.creditMode;
             if (item.creditLedgerId) mapped.credit_ledger_id = item.creditLedgerId;
+            if (item.creditAccountId) mapped.credit_account_id = item.creditAccountId;
             if (item.debitLedger) mapped.debit_ledger = item.debitLedger;
             if (item.creditLedger) mapped.credit_ledger = item.creditLedger;
+            if (item.debitAccount) mapped.debit_account = item.debitAccount;
+            if (item.creditAccount) mapped.credit_account = item.creditAccount;
             break;
     }
 

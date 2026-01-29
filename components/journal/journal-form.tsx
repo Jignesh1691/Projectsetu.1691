@@ -33,9 +33,11 @@ export function JournalForm({ onSuccess, initialData, mode = 'create', onCancel 
         description: initialData?.description || '',
         debitMode: initialData?.debit_mode || 'ledger',
         debitLedgerId: initialData?.debit_ledger_id || '',
+        debitAccountId: initialData?.debit_account_id || '',
         debitProjectId: initialData?.debit_project_id || '',
         creditMode: initialData?.credit_mode || 'ledger',
         creditLedgerId: initialData?.credit_ledger_id || '',
+        creditAccountId: initialData?.credit_account_id || '',
         creditProjectId: initialData?.credit_project_id || '',
         requestMessage: '',
     });
@@ -98,20 +100,20 @@ export function JournalForm({ onSuccess, initialData, mode = 'create', onCancel 
                 description: mode === 'edit' ? 'Journal Entry update submitted' : 'Journal Entry Created'
             });
 
-            if (mode === 'create') {
-                setFormData({
-                    date: format(new Date(), 'yyyy-MM-dd'),
-                    amount: '',
-                    description: '',
-                    debitMode: 'ledger',
-                    debitLedgerId: '',
-                    debitProjectId: '',
-                    creditMode: 'ledger',
-                    creditLedgerId: '',
-                    creditProjectId: '',
-                    requestMessage: ''
-                });
-            }
+            setFormData({
+                date: format(new Date(), 'yyyy-MM-dd'),
+                amount: '',
+                description: '',
+                debitMode: 'ledger',
+                debitLedgerId: '',
+                debitAccountId: '',
+                debitProjectId: '',
+                creditMode: 'ledger',
+                creditLedgerId: '',
+                creditAccountId: '',
+                creditProjectId: '',
+                requestMessage: ''
+            });
 
             if (onSuccess) onSuccess();
 
@@ -122,55 +124,74 @@ export function JournalForm({ onSuccess, initialData, mode = 'create', onCancel 
         }
     };
 
-    const AccountSelect = ({ mode, setMode, ledgerId, setLedgerId, projectId, setProjectId, label }: any) => (
-        <div className="space-y-4 border p-4 rounded-xl bg-card shadow-sm">
-            <Label className="text-sm font-bold uppercase tracking-wide text-muted-foreground">{label}</Label>
-            <RadioGroup
-                value={mode}
-                onValueChange={(val) => setMode(val)}
-                className="flex flex-row flex-wrap gap-x-4 gap-y-2"
-            >
-                <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="cash" id={`${label}-cash`} />
-                    <Label htmlFor={`${label}-cash`} className="cursor-pointer text-sm font-medium">Cash</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="bank" id={`${label}-bank`} />
-                    <Label htmlFor={`${label}-bank`} className="cursor-pointer text-sm font-medium">Bank</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="ledger" id={`${label}-ledger`} />
-                    <Label htmlFor={`${label}-ledger`} className="cursor-pointer text-sm font-medium">Ledger</Label>
-                </div>
-            </RadioGroup>
+    const AccountSelect = ({ mode, setMode, ledgerId, setLedgerId, accountId, setAccountId, projectId, setProjectId, label }: any) => {
+        const { financial_accounts } = useAppState();
+        const filteredAccounts = financial_accounts.filter(a => a.type === (mode === 'cash' ? 'CASH' : 'BANK'));
 
-            <div className="space-y-3 pt-2">
-                {mode === 'ledger' && (
+        return (
+            <div className="space-y-4 border p-4 rounded-xl bg-card shadow-sm">
+                <Label className="text-sm font-bold uppercase tracking-wide text-muted-foreground">{label}</Label>
+                <RadioGroup
+                    value={mode}
+                    onValueChange={(val) => {
+                        setMode(val);
+                        setAccountId(''); // Reset account when mode changes
+                    }}
+                    className="flex flex-row flex-wrap gap-x-4 gap-y-2"
+                >
+                    <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="cash" id={`${label}-cash`} />
+                        <Label htmlFor={`${label}-cash`} className="cursor-pointer text-sm font-medium">Cash</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="bank" id={`${label}-bank`} />
+                        <Label htmlFor={`${label}-bank`} className="cursor-pointer text-sm font-medium">Bank</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="ledger" id={`${label}-ledger`} />
+                        <Label htmlFor={`${label}-ledger`} className="cursor-pointer text-sm font-medium">Ledger</Label>
+                    </div>
+                </RadioGroup>
+
+                <div className="space-y-3 pt-2">
+                    {mode === 'ledger' ? (
+                        <div className="animate-in fade-in slide-in-from-top-1">
+                            <Combobox
+                                options={ledgerOptions}
+                                value={ledgerId}
+                                onChange={(val) => setLedgerId(val)}
+                                placeholder="Select Ledger..."
+                                searchPlaceholder="Search ledger..."
+                                notFoundMessage="No ledger found."
+                            />
+                        </div>
+                    ) : (
+                        <div className="animate-in fade-in slide-in-from-top-1">
+                            <Combobox
+                                options={filteredAccounts.map(a => ({ value: a.id, label: `${a.name}${a.accountNumber ? ` (${a.accountNumber.slice(-4)})` : ''}` }))}
+                                value={accountId}
+                                onChange={(val) => setAccountId(val)}
+                                placeholder={`Select ${mode === 'cash' ? 'Cash' : 'Bank'} Account...`}
+                                searchPlaceholder={`Search ${mode === 'cash' ? 'cash' : 'bank'} accounts...`}
+                                notFoundMessage="No account found."
+                            />
+                        </div>
+                    )}
+
                     <div className="animate-in fade-in slide-in-from-top-1">
                         <Combobox
-                            options={ledgerOptions}
-                            value={ledgerId}
-                            onChange={(val) => setLedgerId(val)}
-                            placeholder="Select Ledger..."
-                            searchPlaceholder="Search ledger..."
-                            notFoundMessage="No ledger found."
+                            options={projectOptions}
+                            value={projectId}
+                            onChange={(val) => setProjectId(val)}
+                            placeholder="Select Project*"
+                            searchPlaceholder="Search project..."
+                            notFoundMessage="No project found."
                         />
                     </div>
-                )}
-
-                <div className="animate-in fade-in slide-in-from-top-1">
-                    <Combobox
-                        options={projectOptions}
-                        value={projectId}
-                        onChange={(val) => setProjectId(val)}
-                        placeholder="Select Project*"
-                        searchPlaceholder="Search project..."
-                        notFoundMessage="No project found."
-                    />
                 </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     return (
         <Card className={mode === 'edit' ? "border-0 shadow-none" : "border-border/50 shadow-sm rounded-2xl"}>
@@ -242,6 +263,8 @@ export function JournalForm({ onSuccess, initialData, mode = 'create', onCancel 
                                 setMode={(v: any) => setFormData({ ...formData, debitMode: v, debitLedgerId: '' })}
                                 ledgerId={formData.debitLedgerId}
                                 setLedgerId={(v: any) => setFormData({ ...formData, debitLedgerId: v })}
+                                accountId={formData.debitAccountId}
+                                setAccountId={(v: any) => setFormData({ ...formData, debitAccountId: v })}
                                 projectId={formData.debitProjectId}
                                 setProjectId={(v: any) => setFormData({ ...formData, debitProjectId: v })}
                             />
@@ -253,6 +276,8 @@ export function JournalForm({ onSuccess, initialData, mode = 'create', onCancel 
                                 setMode={(v: any) => setFormData({ ...formData, creditMode: v, creditLedgerId: '' })}
                                 ledgerId={formData.creditLedgerId}
                                 setLedgerId={(v: any) => setFormData({ ...formData, creditLedgerId: v })}
+                                accountId={formData.creditAccountId}
+                                setAccountId={(v: any) => setFormData({ ...formData, creditAccountId: v })}
                                 projectId={formData.creditProjectId}
                                 setProjectId={(v: any) => setFormData({ ...formData, creditProjectId: v })}
                             />

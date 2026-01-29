@@ -517,45 +517,53 @@ export default function ProjectsPage() {
                           <span className="text-rose-600 dark:text-rose-400">Out: {formatCurrency(expenses)}</span>
                         </div>
                       </div>
-                      <div className="text-right flex items-center gap-2">
+                      <div className="flex items-center gap-2 mt-2">
                         <p className={cn('font-bold text-sm', net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400')}>
                           {formatCurrency(net)}
                         </p>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-52 rounded-xl">
-                            <DropdownMenuItem onClick={() => setViewingProject(project)}>
-                              <View className="mr-2 h-4 w-4" /> View Project Summary
-                            </DropdownMenuItem>
-                            <DropdownMenuSub>
-                              <DropdownMenuSubTrigger>
-                                <Download className="mr-2 h-4 w-4" /> Export Report
-                              </DropdownMenuSubTrigger>
-                              <DropdownMenuPortal>
-                                <DropdownMenuSubContent className="rounded-xl">
-                                  <DropdownMenuItem onClick={() => exportProjectReport(project, 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF Report</DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => exportProjectReport(project, 'excel')}><File className="mr-2 h-4 w-4" /> Excel Report</DropdownMenuItem>
-                                </DropdownMenuSubContent>
-                              </DropdownMenuPortal>
-                            </DropdownMenuSub>
-                            {appUser?.role === 'admin' && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => handleEditClick(project)}>
-                                  <Pencil className="mr-2 h-4 w-4" /> Edit Details
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="text-destructive font-medium" onClick={() => setDeletingProject(project)}>
-                                  <Trash2 className="mr-2 h-4 w-4" /> Delete Project
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <Badge variant="outline" className={cn(
+                          "capitalize text-[9px] px-1.5 py-0 border-0 font-bold leading-none h-4",
+                          project.status === 'ACTIVE' ? "bg-emerald-100 text-emerald-700" :
+                            project.status === 'COMPLETED' ? "bg-blue-100 text-blue-700" :
+                              "bg-amber-100 text-amber-700"
+                        )}>
+                          {project.status?.toLowerCase().replace('_', ' ') || 'active'}
+                        </Badge>
                       </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-52 rounded-xl">
+                          <DropdownMenuItem onClick={() => setViewingProject(project)}>
+                            <View className="mr-2 h-4 w-4" /> View Project Summary
+                          </DropdownMenuItem>
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                              <Download className="mr-2 h-4 w-4" /> Export Report
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuPortal>
+                              <DropdownMenuSubContent className="rounded-xl">
+                                <DropdownMenuItem onClick={() => exportProjectReport(project, 'pdf')}><FileText className="mr-2 h-4 w-4" /> PDF Report</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => exportProjectReport(project, 'excel')}><File className="mr-2 h-4 w-4" /> Excel Report</DropdownMenuItem>
+                              </DropdownMenuSubContent>
+                            </DropdownMenuPortal>
+                          </DropdownMenuSub>
+                          {appUser?.role === 'admin' && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => handleEditClick(project)}>
+                                <Pencil className="mr-2 h-4 w-4" /> Edit Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="text-destructive font-medium" onClick={() => setDeletingProject(project)}>
+                                <Trash2 className="mr-2 h-4 w-4" /> Delete Project
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </CardContent>
                 </Card>
@@ -569,12 +577,13 @@ export default function ProjectsPage() {
               <CardContent className="p-0">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Project Name</TableHead>
-                      <TableHead className="text-right">Income</TableHead>
-                      <TableHead className="text-right">Expense</TableHead>
-                      <TableHead className="text-right">Net Balance</TableHead>
-                      <TableHead className="text-right w-[100px]">Actions</TableHead>
+                    <TableRow className="bg-muted/10 hover:bg-muted/10 transition-colors">
+                      <TableHead className="px-6 font-bold uppercase text-[10px] tracking-widest text-muted-foreground whitespace-nowrap">Project Name</TableHead>
+                      <TableHead className="px-6 font-bold uppercase text-[10px] tracking-widest text-muted-foreground whitespace-nowrap text-right">Income</TableHead>
+                      <TableHead className="px-6 font-bold uppercase text-[10px] tracking-widest text-muted-foreground whitespace-nowrap text-right">Expense</TableHead>
+                      <TableHead className="px-6 font-bold uppercase text-[10px] tracking-widest text-muted-foreground whitespace-nowrap text-right">Net Balance</TableHead>
+                      <TableHead className="px-6 font-bold uppercase text-[10px] tracking-widest text-muted-foreground whitespace-nowrap">Status</TableHead>
+                      <TableHead className="px-6 font-bold uppercase text-[10px] tracking-widest text-muted-foreground whitespace-nowrap text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -590,10 +599,20 @@ export default function ProjectsPage() {
                           </TableCell>
                           <TableCell className="text-right text-emerald-600 dark:text-emerald-400 font-medium">{formatCurrency(income)}</TableCell>
                           <TableCell className="text-right text-rose-600 dark:text-rose-400 font-medium">{formatCurrency(expenses)}</TableCell>
-                          <TableCell className={cn('text-right font-bold', net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400')}>
+                          <TableCell className={cn('px-6 py-4 text-right font-bold', net >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400')}>
                             {formatCurrency(net)}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="px-6 py-4">
+                            <Badge variant="outline" className={cn(
+                              "capitalize text-[10px] px-2 py-0 border-0 font-bold",
+                              project.status === 'ACTIVE' ? "bg-emerald-100 text-emerald-700" :
+                                project.status === 'COMPLETED' ? "bg-blue-100 text-blue-700" :
+                                  "bg-amber-100 text-amber-700"
+                            )}>
+                              {project.status?.toLowerCase().replace('_', ' ') || 'active'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-right">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-muted-foreground opacity-50 group-hover:opacity-100 transition-opacity">

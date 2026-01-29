@@ -57,6 +57,7 @@ const formSchema = z.object({
   ledger_id: z.string().min(1, 'Please select a ledger.'),
   payment_mode: z.enum(['cash', 'bank']),
   bill_url: z.string().optional(),
+  financial_account_id: z.string().optional(),
   request_message: z.string().optional(),
 });
 
@@ -70,10 +71,9 @@ interface TransactionFormProps {
 const CREATE_NEW_VALUE = 'create-new';
 
 export function TransactionForm({ setOpen, transaction }: TransactionFormProps) {
-  const { ledgers, currentUser, userVisibleProjects, appUser } = useAppState();
+  const { ledgers, currentUser, userVisibleProjects, appUser, financial_accounts } = useAppState();
   const { toast } = useToast();
 
-  const [isProjectDialogOpen, setProjectDialogOpen] = useState(false);
   const [isLedgerDialogOpen, setLedgerDialogOpen] = useState(false);
   const [billPreview, setBillPreview] = useState<string | undefined>(transaction?.bill_url);
   const [billName, setBillName] = useState<string | undefined>();
@@ -86,6 +86,7 @@ export function TransactionForm({ setOpen, transaction }: TransactionFormProps) 
       ...(transaction.pending_data ? transaction.pending_data as any : transaction),
       date: transaction.date ? new Date(transaction.date) : new Date(),
       request_message: transaction.request_message || '',
+      financial_account_id: transaction.financial_account_id || '',
     } as any : {
       description: '',
       amount: 0,
@@ -95,8 +96,55 @@ export function TransactionForm({ setOpen, transaction }: TransactionFormProps) 
       ledger_id: '',
       payment_mode: 'bank',
       request_message: '',
+      financial_account_id: '',
     },
   });
+
+  const paymentMode = form.watch('payment_mode');
+
+  useEffect(() => {
+    // Auto-select default account if available and none selected
+    if (!form.getValues('financial_account_id') && financial_accounts.length > 0) {
+      const mode = form.getValues('payment_mode');
+      const accounts = financial_accounts.filter(a => a.type === (mode === 'cash' ? 'CASH' : 'BANK'));
+      if (accounts.length > 0) {
+        // Prefer one named "Default" or just the first
+        const defaultAcc = accounts.find(a => a.name.toLowerCase().includes('default')) || accounts[0];
+        form.setValue('financial_account_id', defaultAcc.id);
+      }
+    }
+  }, [financial_accounts, form]);
+
+  // When payment mode changes, reset account selection or pick a default
+  useEffect(() => {
+    const currentAccId = form.getValues('financial_account_id');
+    const mode = paymentMode;
+    const accounts = financial_accounts.filter(a => a.type === (mode === 'cash' ? 'CASH' : 'BANK'));
+
+    const currentAcc = financial_accounts.find(a => a.id === currentAccId);
+
+    // If current selection doesn't match new mode, change it
+    if (currentAcc && currentAcc.type !== (mode === 'cash' ? 'CASH' : 'BANK')) {
+      const defaultAcc = accounts.find(a => a.name.toLowerCase().includes('default')) || accounts[0];
+      form.setValue('financial_account_id', defaultAcc ? defaultAcc.id : '');
+    } else if (!currentAccId && accounts.length > 0) {
+      const defaultAcc = accounts.find(a => a.name?.toLowerCase().includes('default')) || accounts[0];
+      form.setValue('financial_account_id', defaultAcc.id);
+    }
+  }, [paymentMode, financial_accounts, form]);
+
+  useEffect(() => {
+    // Default ledger to 'Round Off' if found and not set
+    if (!transaction && !form.getValues('ledger_id') && ledgers.length > 0) {
+      const roundOffLedger = ledgers.find(l =>
+        l.name?.toLowerCase().replace(/\s+/g, '') === 'roundoff' ||
+        l.name?.toLowerCase().includes('round off')
+      );
+      if (roundOffLedger) {
+        form.setValue('ledger_id', roundOffLedger.id);
+      }
+    }
+  }, [ledgers, transaction, form]);
 
   useEffect(() => {
     if (transaction?.bill_url) {
@@ -181,13 +229,6 @@ export function TransactionForm({ setOpen, transaction }: TransactionFormProps) 
   };
 
 
-  const handleProjectSelect = (value: string) => {
-    if (value === CREATE_NEW_VALUE) {
-      setProjectDialogOpen(true);
-    } else {
-      form.setValue('project_id', value);
-    }
-  };
 
   const handleLedgerSelect = (value: string) => {
     if (value === CREATE_NEW_VALUE) {
@@ -211,6 +252,7 @@ export function TransactionForm({ setOpen, transaction }: TransactionFormProps) 
     const data = {
       ...values,
       date: values.date.toISOString(),
+      financial_account_id: values.financial_account_id || undefined,
     };
 
     try {
@@ -230,11 +272,12 @@ export function TransactionForm({ setOpen, transaction }: TransactionFormProps) 
 
       form.reset();
       setOpen(false);
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Error submitting transaction:', error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Something went wrong. Please try again.",
+        description: error?.message || "Something went wrong. Please try again.",
       });
     }
   }
@@ -335,6 +378,36 @@ export function TransactionForm({ setOpen, transaction }: TransactionFormProps) 
                   )}
                 />
               </div>
+
+              <FormField
+                control={form.control}
+                name="financial_account_id"
+                render={({ field }) => (
+                  <FormItem className="space-y-1">
+                    <FormLabel className="text-[10px] font-bold uppercase text-muted-foreground/70">
+                      {paymentMode === 'cash' ? 'Cash Account' : 'Bank Account'}
+                    </FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="h-9 md:h-10 rounded-xl text-sm">
+                          <SelectValue placeholder="Select Account" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {financial_accounts
+                          .filter(a => a.type === (paymentMode === 'cash' ? 'CASH' : 'BANK'))
+                          .map(account => (
+                            <SelectItem key={account.id} value={account.id}>
+                              {account.name} {account.accountNumber ? `(${account.accountNumber.slice(-4)})` : ''}
+                            </SelectItem>
+                          ))
+                        }
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <div className="grid grid-cols-2 gap-3">
                 <FormField
@@ -518,19 +591,6 @@ export function TransactionForm({ setOpen, transaction }: TransactionFormProps) 
           </DialogFooter>
         </form>
       </Form>
-      <Dialog open={isProjectDialogOpen} onOpenChange={setProjectDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create a New Project</DialogTitle>
-            <DialogDescription>
-              Add a new construction project to start tracking it.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="mt-4">
-            <ProjectForm setOpen={setProjectDialogOpen} onProjectCreated={handleNewProject} />
-          </div>
-        </DialogContent>
-      </Dialog>
       <Dialog open={isLedgerDialogOpen} onOpenChange={setLedgerDialogOpen}>
         <DialogContent>
           <DialogHeader>

@@ -36,12 +36,14 @@ export const apiResponse = {
  */
 export const TransactionSchema = z.object({
     type: z.enum(['income', 'expense']),
-    amount: z.coerce.number().positive(),
-    description: z.string().min(1),
+    amount: z.coerce.number().min(0.01),
+    description: z.string().min(2),
     date: z.string().or(z.date()),
-    projectId: z.string(),
-    ledgerId: z.string(),
-    paymentMode: z.enum(['cash', 'bank']).default('cash'),
+    projectId: z.string().optional().nullable(),
+    ledgerId: z.string().optional().nullable(),
+    paymentMode: z.enum(['cash', 'bank']),
+    financialAccountId: z.string().optional().nullable(),
+    billUrl: z.string().optional().nullable(),
     convertedFromRecordId: z.string().optional().nullable(),
     hajariSettlementId: z.string().optional().nullable(),
     requestMessage: z.string().optional().nullable(),
@@ -53,8 +55,10 @@ export const JournalEntrySchema = z.object({
     description: z.string().min(1),
     debitMode: z.string(),
     debitLedgerId: z.string().optional().nullable(),
+    debitAccountId: z.string().optional().nullable(),
     creditMode: z.string(),
     creditLedgerId: z.string().optional().nullable(),
+    creditAccountId: z.string().optional().nullable(),
     debitProjectId: z.string(),
     creditProjectId: z.string(),
     requestMessage: z.string().optional().nullable(),
@@ -63,5 +67,61 @@ export const JournalEntrySchema = z.object({
 export const ProjectSchema = z.object({
     name: z.string().min(2),
     location: z.string().optional().nullable(),
+    status: z.enum(['ACTIVE', 'COMPLETED', 'ON_HOLD']).optional(),
     assigned_users: z.array(z.string()).optional(),
+});
+
+export const FinancialAccountSchema = z.object({
+    name: z.string().min(2),
+    type: z.enum(['CASH', 'BANK']),
+    accountNumber: z.string().optional().nullable(),
+    bankName: z.string().optional().nullable(),
+    ifscCode: z.string().optional().nullable(),
+    openingBalance: z.coerce.number().default(0),
+});
+
+export const LedgerSchema = z.object({
+    name: z.string().min(2),
+    type: z.enum(['income', 'expense']).optional().nullable(),
+    gstNumber: z.string().optional().nullable(),
+    isGstRegistered: z.boolean().default(false),
+    billingAddress: z.string().optional().nullable(),
+    state: z.string().optional().nullable(),
+});
+
+export const RecordSchema = z.object({
+    type: z.enum(['income', 'expense']),
+    amount: z.coerce.number().min(0.01),
+    description: z.string().min(2),
+    dueDate: z.string().or(z.date()),
+    projectId: z.string(),
+    ledgerId: z.string(),
+    paymentMode: z.enum(['cash', 'bank']),
+    financialAccountId: z.string().optional().nullable(),
+    billUrl: z.string().optional().nullable(),
+    status: z.enum(['pending', 'partial', 'paid']).default('pending'),
+
+    // GST Fields
+    invoiceNumber: z.string().optional().nullable(),
+    invoiceDate: z.string().or(z.date()).optional().nullable(),
+    taxableAmount: z.coerce.number().optional().nullable(),
+    cgstRate: z.coerce.number().optional().nullable(),
+    cgstAmount: z.coerce.number().optional().nullable(),
+    sgstRate: z.coerce.number().optional().nullable(),
+    sgstAmount: z.coerce.number().optional().nullable(),
+    igstRate: z.coerce.number().optional().nullable(),
+    igstAmount: z.coerce.number().optional().nullable(),
+    cessAmount: z.coerce.number().optional().nullable(),
+    totalGstAmount: z.coerce.number().optional().nullable(),
+    roundOffAmount: z.coerce.number().optional().nullable(),
+});
+
+export const RecordSettlementSchema = z.object({
+    recordId: z.string(),
+    settlementDate: z.string().or(z.date()),
+    amountPaid: z.coerce.number().positive(),
+    paymentMode: z.enum(['cash', 'bank']),
+    financialAccountId: z.string().optional().nullable(),
+    remarks: z.string().optional().nullable(),
+    convertToTransaction: z.boolean().default(false),
 });

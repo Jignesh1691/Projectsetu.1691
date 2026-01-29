@@ -3,15 +3,12 @@
 import { updateState } from './state-manager';
 import { Project, ProjectUser, Transaction, Photo, Document as AppDocument } from '../definitions';
 
-export const addProject = async (projectData: Omit<Project, 'id'>, assigned_users: string[] = []) => {
+export const addProject = async (projectData: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'organization_id'>) => {
     try {
         const response = await fetch('/api/projects', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                ...projectData,
-                assigned_users
-            }),
+            body: JSON.stringify(projectData),
         });
 
         if (!response.ok) {
@@ -22,16 +19,9 @@ export const addProject = async (projectData: Omit<Project, 'id'>, assigned_user
         const newProject = await response.json();
 
         updateState(prev => {
-            const newProjectUsers = assigned_users.map(userId => ({
-                project_id: newProject.id,
-                user_id: userId,
-                status: 'active'
-            }));
-
             return {
                 ...prev,
                 projects: [newProject, ...prev.projects],
-                project_users: [...prev.project_users, ...newProjectUsers]
             };
         });
         return newProject;
@@ -41,7 +31,7 @@ export const addProject = async (projectData: Omit<Project, 'id'>, assigned_user
     }
 };
 
-export const editProject = async (id: string, projectData: Partial<Project>, assigned_users: string[]) => {
+export const editProject = async (id: string, projectData: Partial<Project>) => {
     try {
         const response = await fetch('/api/projects', {
             method: 'PUT',
@@ -49,7 +39,6 @@ export const editProject = async (id: string, projectData: Partial<Project>, ass
             body: JSON.stringify({
                 id,
                 ...projectData,
-                assigned_users
             }),
         });
 
@@ -64,14 +53,7 @@ export const editProject = async (id: string, projectData: Partial<Project>, ass
             const updatedProjects = [...prev.projects];
             updatedProjects[projectIndex] = updatedProject;
 
-            const otherProjectUsers = prev.project_users.filter((pu: ProjectUser) => pu.project_id !== id);
-            const newProjectUsers = assigned_users.map(userId => ({
-                project_id: id,
-                user_id: userId,
-                status: 'active'
-            }));
-
-            return { ...prev, projects: updatedProjects, project_users: [...otherProjectUsers, ...newProjectUsers] };
+            return { ...prev, projects: updatedProjects };
         });
     } catch (error) {
         console.error("Error editing project:", error);

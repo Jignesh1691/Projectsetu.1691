@@ -41,6 +41,8 @@ model Organization {
   records      Record[]
   journalEntries JournalEntry[]
   auditLogs      AuditLog[]
+  financialAccounts FinancialAccount[]
+  recordSettlements RecordSettlement[]
 }
 
 model User {
@@ -68,6 +70,7 @@ model User {
 
   createdDocuments      Document[]       @relation("DocumentCreator")
   createdJournalEntries JournalEntry[]   @relation("JournalCreator")
+  createdSettlements    RecordSettlement[] @relation("SettlementCreator")
   auditLogs             AuditLog[]
 }
 
@@ -93,10 +96,17 @@ model Invite {
   accepted       Boolean      @default(false)
 }
 
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+  ON_HOLD
+}
+
 model Project {
   id             String        @id @default(cuid())
   name           String
   location       String?
+  status         ProjectStatus @default(ACTIVE)
   organizationId String
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   projectUsers   ProjectUser[]
@@ -129,6 +139,14 @@ model ProjectUser {
 model Ledger {
   id             String        @id @default(cuid())
   name           String
+  category       String?       // income, expense (for GST categorization)
+  
+  // GST Fields
+  gstNumber      String?
+  isGstRegistered Boolean      @default(false)
+  billingAddress String?
+  state          String?       // For determining CGST+SGST vs IGST
+  
   organizationId String
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   transactions   Transaction[]
@@ -145,11 +163,11 @@ model Ledger {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   
-  @@unique([organizationId, name])
-  
-  // Journal Relations
   journalDebits  JournalEntry[] @relation("JournalDebit")
   journalCredits JournalEntry[] @relation("JournalCredit")
+  
+  @@unique([organizationId, name])
+  @@index([category])
 }
 
 model Transaction {
@@ -174,6 +192,9 @@ model Transaction {
   creator     User     @relation("TransactionCreator", fields: [createdBy], references: [id], onDelete: Cascade)
   convertedFromRecordId String?
   hajariSettlementId String?
+
+  financialAccountId String?
+  financialAccount   FinancialAccount? @relation(fields: [financialAccountId], references: [id])
   
   // Approval workflow fields
   approvalStatus  String?  @default("approved")
@@ -191,13 +212,31 @@ model Transaction {
 
 model Record {
   id          String   @id @default(cuid())
-  type        String   // asset, liability
+  type        String   // income, expense (for clarity with GST invoices)
   amount      Float
   description String
   dueDate     DateTime
-  status      String   @default("pending") // pending, paid
+  status      String   @default("pending") // pending, partial, paid
   paymentMode String   @default("cash") // cash, bank
   billUrl     String?
+  
+  // GST Invoice Fields
+  invoiceNumber    String?
+  invoiceDate      DateTime?
+  taxableAmount    Float?    @default(0)
+  cgstRate         Float?    @default(0)
+  cgstAmount       Float?    @default(0)
+  sgstRate         Float?    @default(0)
+  sgstAmount       Float?    @default(0)
+  igstRate         Float?    @default(0)
+  igstAmount       Float?    @default(0)
+  cessAmount       Float?    @default(0)
+  totalGstAmount   Float?    @default(0)
+  roundOffAmount   Float?    @default(0)
+  
+  // Payment tracking
+  paidAmount       Float?    @default(0)
+  balanceAmount    Float?
   
   projectId   String
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -211,6 +250,12 @@ model Record {
   createdBy   String
   creator     User     @relation("RecordCreator", fields: [createdBy], references: [id], onDelete: Cascade)
   
+  financialAccountId String?
+  financialAccount   FinancialAccount? @relation(fields: [financialAccountId], references: [id])
+
+  // Payment settlements
+  settlements RecordSettlement[]
+
   // Approval workflow fields
   approvalStatus  String?  @default("approved")
   submittedBy     String?
@@ -223,6 +268,8 @@ model Record {
   updatedAt   DateTime @updatedAt
   
   @@index([createdBy])
+  @@index([invoiceNumber])
+  @@index([status])
 }
 
 model Labor {
@@ -480,6 +527,11 @@ model JournalEntry {
   creditLedgerId String?
   creditLedger   Ledger?  @relation("JournalCredit", fields: [creditLedgerId], references: [id])
   
+  debitAccountId String?
+  debitAccount   FinancialAccount? @relation("JournalDebitAccount", fields: [debitAccountId], references: [id])
+  creditAccountId String?
+  creditAccount  FinancialAccount? @relation("JournalCreditAccount", fields: [creditAccountId], references: [id])
+  
   debitProjectId String
   debitProject   Project @relation("JournalDebitProject", fields: [debitProjectId], references: [id], onDelete: Cascade)
 
@@ -527,4 +579,57 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([userId])
   @@index([createdAt])
+}
+
+model FinancialAccount {
+  id             String       @id @default(cuid())
+  name           String
+  type           String       // CASH, BANK
+  accountNumber  String?
+  bankName       String?
+  ifscCode       String?
+  openingBalance Float        @default(0)
+  
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  transactions   Transaction[]
+  records        Record[]
+  settlements    RecordSettlement[]
+  
+  debitJournalEntries  JournalEntry[] @relation("JournalDebitAccount")
+  creditJournalEntries JournalEntry[] @relation("JournalCreditAccount")
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, name])
+}
+
+model RecordSettlement {
+  id                 String   @id @default(cuid())
+  recordId           String
+  record             Record   @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  
+  settlementDate     DateTime
+  amountPaid         Float
+  paymentMode        String   @default("cash")
+  transactionId      String?
+  
+  financialAccountId String?
+  financialAccount   FinancialAccount? @relation(fields: [financialAccountId], references: [id])
+  
+  remarks            String?
+  
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  createdBy          String
+  creator            User     @relation("SettlementCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  
+  @@index([recordId])
+  @@index([createdBy])
 }

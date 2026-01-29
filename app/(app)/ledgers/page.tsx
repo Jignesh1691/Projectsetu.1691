@@ -102,7 +102,7 @@ export default function LedgersPage() {
   const filteredLedgers = useMemo(() => {
     if (!isLoaded) return [];
     return ledgers.filter(ledger =>
-      ledger.name.toLowerCase().includes(searchTerm.toLowerCase())
+      ledger.name?.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [ledgers, searchTerm, isLoaded]);
 
@@ -406,12 +406,12 @@ export default function LedgersPage() {
         (data) => {
           if (data.section === 'body') {
             if (data.column.index === 3) { // Type
-              const type = data.cell.text[0].toLowerCase();
+              const type = (data.cell.text[0] || '').toLowerCase();
               data.cell.styles.textColor = type === 'income' ? [22, 163, 74] : [220, 38, 38];
               data.cell.styles.fontStyle = 'bold';
             }
             if (data.column.index === 4) { // Amount
-              const type = data.row.raw[3].toLowerCase();
+              const type = (data.row.raw[3] || '').toLowerCase();
               data.cell.styles.textColor = type === 'income' ? [22, 163, 74] : [220, 38, 38];
               data.cell.styles.halign = 'center';
               data.cell.styles.fontStyle = 'bold';
@@ -426,18 +426,18 @@ export default function LedgersPage() {
         (data) => {
           if (data.section === 'body') {
             if (data.column.index === 3) {
-              const type = data.cell.text[0].toLowerCase();
+              const type = (data.cell.text[0] || '').toLowerCase();
               data.cell.styles.textColor = type === 'asset' ? [22, 163, 74] : [220, 38, 38];
               data.cell.styles.fontStyle = 'bold';
             }
             if (data.column.index === 4) {
-              const type = data.row.raw[3].toLowerCase();
+              const type = (data.row.raw[3] || '').toLowerCase();
               data.cell.styles.textColor = type === 'asset' ? [22, 163, 74] : [220, 38, 38];
               data.cell.styles.halign = 'center';
               data.cell.styles.fontStyle = 'bold';
             }
             if (data.column.index === 5) {
-              data.cell.styles.textColor = data.cell.text[0].toLowerCase() === 'paid' ? [22, 163, 74] : [234, 179, 8];
+              data.cell.styles.textColor = (data.cell.text[0] || '').toLowerCase() === 'paid' ? [22, 163, 74] : [234, 179, 8];
               data.cell.styles.fontStyle = 'bold';
             }
           }
